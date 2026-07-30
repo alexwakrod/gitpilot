@@ -1,0 +1,18 @@
+version: "3.8"
+services:
+  gitpilot:
+    build: .
+    container_name: gitpilot-daemon
+    stdin_open: true     # keep stdin open for interactive setup
+    tty: true            # allocate a pseudo-TTY for the CLI
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount your project directories (adjust the host path)
+      - ~/projects:/workspace
+      # Persist GitPilot data (token, DB, config)
+      - gitpilot_data:/root/.gitpilot
+    restart: unless-stopped
+
+volumes:
+  gitpilot_data:

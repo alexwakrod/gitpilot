@@ -1,0 +1,1 @@
+"""Core layer - watcher, committer, executor, notifications."""
