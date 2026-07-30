@@ -11,7 +11,7 @@ if ([version]$ver -lt [version]"3.11") {
 }
 
 Write-Host "==> Installing GitPilot"
-python -m pip install gitpilot
+python -m pip install gitpilot-ai
 
 Write-Host "==> Installing Windows service (requires Administrator)"
 python -m gitpilot.cli.main install-service

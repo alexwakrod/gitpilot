@@ -13,7 +13,7 @@ $PYTHON -c "import sys; assert sys.version_info >= (3,11)" || {
 }
 
 echo "==> Installing GitPilot"
-$PYTHON -m pip install --user gitpilot
+$PYTHON -m pip install --user gitpilot-ai
 
 echo "==> Installing background service"
 $PYTHON -m gitpilot.cli.main install-service
