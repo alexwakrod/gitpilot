@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
     "ai_provider": "grok",
     "ai_model": "grok-2",
     "ai_temperature": 0.5,
-    "debounce_interval": 120,   # changed from 3 to 120
+    "debounce_interval": 120,
     "smart_grouping": True,
     "branch_aware_messages": True,
     "max_commit_retries": 3,
@@ -39,6 +39,7 @@ class SettingsManager:
             config_path = get_gitpilot_dir() / "config.json"
         self.config_path = config_path
         self._data: dict[str, Any] = {}
+        self.load()  # populate _data immediately
 
     def load(self) -> dict[str, Any]:
         """Load configuration from disk, applying defaults for missing keys."""
@@ -80,10 +81,8 @@ class SettingsManager:
     def save(self) -> None:
         """Persist current configuration to disk."""
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        # Atomic write: write to temp file, then rename
         tmp_path = self.config_path.with_suffix(".tmp")
         tmp_path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
         tmp_path.replace(self.config_path)
-        # Set restrictive permissions on Unix
         if sys.platform != "win32":
             self.config_path.chmod(0o600)
