@@ -1,6 +1,5 @@
 """CLI interface for GitPilot – fully interactive TUI with intelligent project setup,
-   API key validation, cross‑platform service, Groq support, and all intelligence commands,
-   now using native Git porcelain parsing for accurate change detection."""
+   API key validation, cross‑platform service, Groq & Qwen support, and all intelligence commands."""
 
 import asyncio
 import json
@@ -40,7 +39,7 @@ from gitpilot.core.project_setup import (
 )
 from gitpilot.core.executor import GitExecutor
 from gitpilot.core.intelligence import DomainClassifier, CommitSplitter, OptimizationScanner
-from gitpilot.core import git_utils  # <-- native Git porcelain parsing
+from gitpilot.core import git_utils
 from gitpilot.infrastructure.db import managed_connection, get_db_path
 from gitpilot.infrastructure.repositories.commits import CommitsRepository
 from gitpilot.infrastructure.repositories.patterns import PatternsRepository
@@ -84,7 +83,7 @@ def _get_client() -> Optional[httpx.Client]:
 
 
 # ============================================================================
-# API key validation (unchanged, but kept for completeness)
+# API key validation (live test with detailed feedback)
 # ============================================================================
 async def _test_grok_api_key(key: str, model: str) -> bool:
     try:
@@ -124,6 +123,23 @@ async def _test_groq_api_key(key: str, model: str) -> bool:
         return False
     except Exception as e:
         console.print(f"[yellow]Error testing key: {e}[/yellow]")
+        return False
+
+async def _test_qwen_api_key(key: str, model: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5},
+            )
+            if resp.status_code == 200:
+                return True
+            else:
+                console.print(f"[yellow]Qwen API returned {resp.status_code}: {resp.text[:200]}[/yellow]")
+                return False
+    except Exception as e:
+        console.print(f"[yellow]Error testing Qwen key: {e}[/yellow]")
         return False
 
 async def _test_openai_api_key(key: str, model: str) -> bool:
@@ -182,23 +198,6 @@ async def _test_ollama_connection(base_url: str, model: str) -> bool:
         console.print(f"[yellow]Could not connect to Ollama: {e}[/yellow]")
         return False
 
-async def _test_qwen_api_key(key: str, model: str) -> bool:
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(
-                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5},
-            )
-            if resp.status_code == 200:
-                return True
-            else:
-                console.print(f"[yellow]Qwen API returned {resp.status_code}: {resp.text[:200]}[/yellow]")
-                return False
-    except Exception as e:
-        console.print(f"[yellow]Error testing Qwen key: {e}[/yellow]")
-        return False
-
 def _validate_api_key_format(key: str, provider: str) -> bool:
     if not key or not key.strip():
         return False
@@ -209,6 +208,9 @@ def _validate_api_key_format(key: str, provider: str) -> bool:
     if provider == "openai" and not key.startswith("sk-"):
         return False
     if provider == "anthropic" and not key.startswith("sk-ant-"):
+        return False
+    # Qwen uses sk-ws- prefix (Alibaba DashScope)
+    if provider == "qwen" and not key.startswith("sk-ws-"):
         return False
     return True
 
@@ -228,12 +230,12 @@ def _prompt_api_key_with_test(provider: str, default_key: str, model: str) -> st
             ok = asyncio.run(_test_grok_api_key(key, model))
         elif provider == "groq":
             ok = asyncio.run(_test_groq_api_key(key, model))
+        elif provider == "qwen":
+            ok = asyncio.run(_test_qwen_api_key(key, model))
         elif provider == "openai":
             ok = asyncio.run(_test_openai_api_key(key, model))
         elif provider == "anthropic":
             ok = asyncio.run(_test_anthropic_api_key(key, model))
-        elif provider == "qwen":
-            ok = asyncio.run(__test_qwen_api_key(key, model))
         if ok:
             console.print("[green]API key is valid.[/green]")
             return key
@@ -245,7 +247,7 @@ def _prompt_api_key_with_test(provider: str, default_key: str, model: str) -> st
 
 
 # ============================================================================
-# Non‑blocking key input reader (unchanged)
+# Non‑blocking key input reader
 # ============================================================================
 class NonBlockingKeyReader:
     def __init__(self):
@@ -360,7 +362,7 @@ class DirectoryPicker:
 
 
 # ============================================================================
-# Native GUI folder picker (unchanged)
+# Native GUI folder picker
 # ============================================================================
 def _pick_directory_gui() -> Optional[Path]:
     try:
@@ -383,7 +385,7 @@ def _pick_directory_gui() -> Optional[Path]:
 
 
 # ============================================================================
-# Auto‑launch in new terminal if not in a TTY (unchanged)
+# Auto‑launch in new terminal if not in a TTY
 # ============================================================================
 def _spawn_in_new_terminal() -> None:
     script = f'"{sys.executable}" -m gitpilot.cli.main'
@@ -403,7 +405,7 @@ def _spawn_in_new_terminal() -> None:
 
 
 # ============================================================================
-# Main TUI (unchanged, except for _add_project which already uses project_setup)
+# Main TUI
 # ============================================================================
 class MainMenu:
     def __init__(self):
@@ -530,7 +532,6 @@ class MainMenu:
         readchar.readkey()
 
     def _monitor(self):
-        # unchanged (uses _get_client and SSE)
         console.clear()
         try:
             resp = self.client.get("/api/v1/projects")
@@ -675,7 +676,7 @@ class MainMenu:
         current = config.get("ai_provider", "grok")
         console.print(f"Current provider: [bold]{current}[/bold]")
         provider = Prompt.ask("New provider",
-                              choices=["grok", "groq", "openai", "anthropic", "ollama", "qwen"],
+                              choices=["grok", "groq", "qwen", "openai", "anthropic", "ollama"],
                               default=current)
         self.settings_mgr.set("ai_provider", provider)
 
@@ -689,6 +690,11 @@ class MainMenu:
             self.settings_mgr.set("groq_model", model)
             key = _prompt_api_key_with_test("groq", config.get("groq_api_key", ""), model)
             self.settings_mgr.set("groq_api_key", key)
+        elif provider == "qwen":
+            model = Prompt.ask("Model", default=config.get("qwen_model", "qwen-plus"))
+            self.settings_mgr.set("qwen_model", model)
+            key = _prompt_api_key_with_test("qwen", config.get("qwen_api_key", ""), model)
+            self.settings_mgr.set("qwen_api_key", key)
         elif provider == "openai":
             model = Prompt.ask("Model", default=config.get("ai_model", "gpt-4o"))
             self.settings_mgr.set("ai_model", model)
@@ -770,7 +776,7 @@ class MainMenu:
 
 
 # ============================================================================
-# Cross‑platform service installation (unchanged)
+# Cross‑platform service installation
 # ============================================================================
 def _install_linux_service() -> None:
     service_dir = Path.home() / ".config" / "systemd" / "user"
@@ -862,7 +868,7 @@ def _install_windows_service() -> None:
 
 
 # ============================================================================
-# Click CLI group – all commands now use native git_utils where applicable
+# Click CLI group
 # ============================================================================
 @click.group(invoke_without_command=True)
 @click.version_option(version="0.2.0")
@@ -921,7 +927,7 @@ def setup():
 
     ai_provider = Prompt.ask(
         "Choose AI provider",
-        choices=["grok", "groq", "openai", "anthropic", "ollama"],
+        choices=["grok", "groq", "qwen", "openai", "anthropic", "ollama"],
         default=config.get("ai_provider", "grok"),
     )
     settings_mgr.set("ai_provider", ai_provider)
@@ -935,6 +941,11 @@ def setup():
         settings_mgr.set("groq_model", model)
         key = _prompt_api_key_with_test("groq", config.get("groq_api_key", ""), model)
         settings_mgr.set("groq_api_key", key)
+    elif ai_provider == "qwen":
+        model = Prompt.ask("Model", default=config.get("qwen_model", "qwen-plus"))
+        settings_mgr.set("qwen_model", model)
+        key = _prompt_api_key_with_test("qwen", config.get("qwen_api_key", ""), model)
+        settings_mgr.set("qwen_api_key", key)
     elif ai_provider == "openai":
         model = Prompt.ask("Model", default=config.get("ai_model", "gpt-4o"))
         settings_mgr.set("ai_model", model)
@@ -952,11 +963,6 @@ def setup():
         settings_mgr.set("ollama_model", model)
         console.print("[cyan]Testing connection to Ollama...[/cyan]")
         ok = asyncio.run(_test_ollama_connection(url, model))
-    elif ai_provider == "qwen":
-        model = Prompt.ask("Model", default=config.get("qwen_model", "qwen-plus"))
-        settings_mgr.set("qwen_model", model)
-        key = _prompt_api_key_with_test("qwen", config.get("qwen_api_key", ""), model)
-        settings_mgr.set("qwen_api_key", key)
         if ok:
             console.print("[green]Ollama connection successful.[/green]")
         else:
@@ -1224,7 +1230,7 @@ def watch() -> None:
 
 
 # ------------------------------------------------------------------
-# Intelligence commands (now using git_utils)
+# Intelligence commands (using git_utils)
 # ------------------------------------------------------------------
 
 @cli.command()
@@ -1303,10 +1309,8 @@ def optimize(project_path: str) -> None:
         console.print("[red]Not a Git repository.[/red]")
         return
 
-    # Get staged diff; if empty, get unstaged diff
     diff = git_utils.get_staged_diff(repo_path)
     if not diff:
-        # Get unstaged diff using native git utils: we can run `git diff`
         try:
             result = subprocess.run(
                 ["git", "diff"],
@@ -1316,7 +1320,6 @@ def optimize(project_path: str) -> None:
         except Exception:
             pass
     if not diff:
-        # Last resort: get changes to untracked files? Not meaningful for diff.
         console.print("No changes to analyze.")
         return
 
