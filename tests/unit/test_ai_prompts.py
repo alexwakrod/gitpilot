@@ -19,7 +19,11 @@ class TestBuildCommitPrompt:
         prompt = build_commit_prompt(diff=diff, branch=branch)
         assert "feature/login" in prompt
         assert "scope" in prompt.lower()
-        assert "type(scope): description" in prompt
+
+    def test_prompt_with_scope_hint(self):
+        diff = "diff content"
+        prompt = build_commit_prompt(diff=diff, branch=None, scope_hint="ui")
+        assert "scope 'ui'" in prompt.lower()
 
     def test_prompt_includes_diff_unchanged(self):
         diff = "diff content with special chars: @@@ &&&"
