@@ -8,12 +8,11 @@ version = "0.2.0"
 description = "Local AI-powered Git auto-committer daemon"
 authors = [{ name = "Alex Wakrod", email = "alexwakrod@gmail.com" }]
 license = "MIT"
-requires-python = ">=3.11"
-dynamic = ["readme"]
+readme = "README.md"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
-    "duckdb>=0.9.0",
     "watchdog>=3.0.0",
     "click>=8.1.0",
     "rich>=13.5.0",
@@ -30,7 +29,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.1.0",
-    "httpx-mock>=0.11.0",
+    "pytest-httpx>=0.30.0",
     "pyinstaller>=5.13.0",
 ]
 
