@@ -12,7 +12,6 @@ def build_commit_prompt(
     branch: Optional[str] = None,
     scope_hint: Optional[str] = None,
 ) -> str:
-    """Construct the AI prompt for generating a conventional commit message."""
     scope_instruction = ""
     if scope_hint and scope_hint not in ("general", "other"):
         scope_instruction = (
@@ -52,7 +51,8 @@ def clean_commit_message(raw: str) -> str:
     cleaned = re.sub(r"^[-*]\s+", "", cleaned.strip())
     cleaned = re.sub(r"^(here is the commit message:?\s*)", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^(the commit message is:?\s*)", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    # Collapse any sequence of newlines to a single newline
+    cleaned = re.sub(r"\n+", "\n", cleaned)
     if cleaned.startswith("(") and cleaned.endswith(")"):
         cleaned = cleaned[1:-1].strip()
     return cleaned.strip()
@@ -96,10 +96,6 @@ class AICommitter:
         scope_hint: Optional[str] = None,
         custom_prompt: Optional[str] = None,
     ) -> Optional[str]:
-        """Generate a commit message using the configured AI provider.
-        
-        If `custom_prompt` is provided, it overrides the diff‑based prompt.
-        """
         if custom_prompt:
             prompt = custom_prompt
         else:
