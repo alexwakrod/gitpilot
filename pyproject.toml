@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gitpilot-ai"
-version = "0.1.1"
+version = "0.2.0"
 description = "Local AI-powered Git auto-committer daemon"
 authors = [{ name = "Alex Wakrod", email = "alexwakrod@gmail.com" }]
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.11"
 dynamic = ["readme"]
 dependencies = [
@@ -22,6 +22,7 @@ dependencies = [
     "pydantic>=2.4.0",
     "python-dotenv>=1.0.0",
     "readchar>=4.0.0",
+    "python-json-logger>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -37,8 +38,16 @@ dev = [
 gitpilot = "gitpilot.cli.main:cli"
 gitpilotd = "gitpilot.daemon.server:main"
 
-[tool.setuptools.packages.find]
-where = ["."]
+[tool.setuptools]
+packages = [
+    "gitpilot",
+    "gitpilot.cli",
+    "gitpilot.daemon",
+    "gitpilot.core",
+    "gitpilot.domain",
+    "gitpilot.infrastructure",
+    "gitpilot.infrastructure.repositories",
+]
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }
