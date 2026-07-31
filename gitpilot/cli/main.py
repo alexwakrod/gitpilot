@@ -656,7 +656,7 @@ class MainMenu:
         current = config.get("ai_provider", "grok")
         console.print(f"Current provider: [bold]{current}[/bold]")
         provider = Prompt.ask("New provider",
-                              choices=["grok", "groq", "openai", "anthropic", "ollama"],
+                              choices=["grok", "groq", "openai", "anthropic", "ollama", "qwen"],
                               default=current)
         self.settings_mgr.set("ai_provider", provider)
 
