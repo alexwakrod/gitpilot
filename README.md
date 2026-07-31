@@ -1,3 +1,6 @@
+<div align="center">
+  <img src="https://raw.githubusercontent.com/alexwakrod/gitpilot/main/assets/gitpilot-logo.svg" alt="GitPilot logo" width="160" />
+
   # GitPilot
 
   **Every save, a meaningful commit.**
@@ -33,6 +36,8 @@ GitPilot watches your Git repositories and turns every save into a meaningful, [
 
 <div align="center">
   <img src="assets/demo.gif" alt="GitPilot live monitor demo" width="760" />
+  <br/>
+  <sub>Live demo coming soon</sub>
 </div>
 
 ---
@@ -101,7 +106,7 @@ flowchart LR
 ```
 
 1. **Watch** — `watchdog` observes every registered project recursively, ignoring `.git` internals, swap files, and duplicate events.
-2. **Debounce** — changes settle for a configurable quiet period (default `3s`).
+2. **Debounce** — changes settle for a configurable quiet period (default `120s`).
 3. **Group** — related files (same directory, similar names) collapse into a single logical change.
 4. **Write** — the active AI provider drafts a branch-aware Conventional Commit message.
 5. **Commit** — git executes with automatic retry; Discord is notified if enabled.
@@ -130,6 +135,8 @@ chore: update dependencies
 | **xAI Grok** | Cloud | Required | — | Default — fast and accurate |
 | **OpenAI** | Cloud | Required | — | GPT-class message quality |
 | **Anthropic** | Cloud | Required | — | Claude-class message quality |
+| **Groq** | Cloud | Required | — | Fast inference at low cost |
+| **Qwen (Alibaba)** | Cloud | Required | — | Pay-as-you-go, high limits |
 
 If the AI is unreachable, GitPilot falls back to sensible messages derived from file names — your history is never blocked.
 
@@ -207,13 +214,13 @@ gitpilot/
 │   ├── executor.py       # Git operations + retry
 │   └── notifications.py  # Discord webhook
 ├── domain/           # Pydantic models, policies, settings
-├── infrastructure/   # DuckDB, HTTP client, repositories
+├── infrastructure/   # SQLite, HTTP client, repositories
 └── tests/            # Unit, integration, E2E
 ```
 
 | Concern | Choice | Why |
 | --- | --- | --- |
-| Database | Embedded [DuckDB](https://duckdb.org/) | Zero extra processes, fast queries |
+| Database | Embedded SQLite | Zero extra processes, fast queries |
 | IPC | FastAPI over loopback + bearer token | Local-only, secure by default |
 | File watching | [watchdog](https://python-watchdog.readthedocs.io/) | Battle-tested, cross-platform |
 | AI integration | Strategy-pattern adapter | Swap providers without touching core logic |
@@ -226,10 +233,10 @@ Settings live in `~/.gitpilot/config.json` and are editable via the TUI or `gitp
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `ai_provider` | `grok` | AI backend: `grok`, `openai`, `anthropic`, or `ollama` |
+| `ai_provider` | `grok` | AI backend: `grok`, `openai`, `anthropic`, `ollama`, `groq`, `qwen` |
 | `ai_model` | `grok-2` | Model name passed to the provider |
 | `ai_temperature` | `0.5` | Sampling temperature for message generation |
-| `debounce_interval` | `3` | Quiet period in seconds before changes are committed |
+| `debounce_interval` | `120` | Quiet period in seconds before changes are committed |
 | `smart_grouping` | `true` | Group related file changes into one commit |
 | `branch_aware_messages` | `true` | Include branch scope, e.g. `feat(login): …` |
 | `max_commit_retries` | `3` | Retry attempts for failed git operations |
@@ -244,7 +251,7 @@ Settings live in `~/.gitpilot/config.json` and are editable via the TUI or `gitp
   "ai_provider": "grok",
   "ai_model": "grok-2",
   "ai_temperature": 0.5,
-  "debounce_interval": 3,
+  "debounce_interval": 120,
   "smart_grouping": true,
   "branch_aware_messages": true,
   "max_commit_retries": 3,
@@ -291,12 +298,19 @@ python -m build
 
 ---
 
+## Community
+
+Join our Discord server for support, feature requests, and real‑time discussion:  
+[![Discord](https://img.shields.io/badge/Discord-GitPilot-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/4NGs3wrkMQ)
+
+---
+
 ## FAQ
 
 <details>
 <summary><strong>Does my code ever leave my machine?</strong></summary>
 
-Only if you choose a cloud AI provider (Grok, OpenAI, Anthropic) — and even then, only the diff metadata needed to write the message is sent. Select the **Ollama** provider for a fully offline, 100% on-device experience.
+Only if you choose a cloud AI provider (Grok, OpenAI, Anthropic, Groq, Qwen) — and even then, only the diff metadata needed to write the message is sent. Select the **Ollama** provider for a fully offline, 100% on-device experience.
 
 </details>
 
