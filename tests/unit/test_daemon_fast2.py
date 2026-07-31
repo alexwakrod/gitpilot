@@ -34,8 +34,12 @@ class TestDaemonLifecycleFast2:
         initialize_database(tmp_path / "data.db")
         lc = DaemonLifecycle({"debounce_interval": 1, "max_commit_retries": 0})
         lc.watcher = MagicMock()
-        lc.start()
-        lc.stop()
+        # Mock the thread creation so that start/stop don't touch a real thread
+        with patch("threading.Thread") as mock_thread_class:
+            mock_thread_instance = MagicMock()
+            mock_thread_class.return_value = mock_thread_instance
+            lc.start()
+            lc.stop()
 
     def test_add_remove_project(self):
         lc = DaemonLifecycle({"debounce_interval": 1})
