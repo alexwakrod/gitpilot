@@ -79,11 +79,13 @@ class TestGetChangedFiles:
 
 
 class TestGetDomainSplitPlan:
-    def test_mocked(self):
+    def test_mocked(self, monkeypatch):
         raw = " M backend/app.py\0"
         with patch("subprocess.run") as run:
             run.return_value.returncode = 0
             run.return_value.stdout = raw
+            # The domain classifier needs the file to exist on disk
+            monkeypatch.setattr(Path, "exists", lambda self: True)
             plan = git_utils.get_domain_split_plan(Path("/tmp"))
             assert "backend" in plan
             assert plan["backend"] == ["backend/app.py"]

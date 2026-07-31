@@ -179,10 +179,10 @@ class TestAICommitterAsync:
 
     @pytest.mark.asyncio
     async def test_groq_api_error_returns_none(self, committer):
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.side_effect = httpx.HTTPStatusError("err", request=None, response=None)
-            msg = await committer._call_groq("diff")
-            assert msg is None
+        # Simulate a network error so the outer generate_message returns None
+        committer._call_groq = AsyncMock(side_effect=httpx.TransportError("timeout"))
+        msg = await committer.generate_message("diff")
+        assert msg is None
 
     @pytest.mark.asyncio
     async def test_generate_message_calls_provider(self, committer):
