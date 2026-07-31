@@ -305,6 +305,9 @@ python -m build
 - [ ] Full-screen **Textual** dashboard with diff viewer
 - [ ] Plugin architecture for notifications (Slack, Telegram, email)
 - [ ] Remote daemon mode (TLS-secured, team usage)
+- [ ] Local-website with multi-agents/interface
+- [ ] VScode extension
+- [ ] Rollback feature
 
 ---
 
