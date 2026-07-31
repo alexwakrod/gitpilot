@@ -28,8 +28,6 @@ class TestFileHashCache:
         monkeypatch.setattr(time, "time", lambda: now)
         cache = FileHashCache(ttl=10)
         cache.set_hash("/stale.py", "stalehash")
-
-        # Advance time past TTL
         monkeypatch.setattr(time, "time", lambda: now + 11)
         assert cache.get_hash("/stale.py") is None
 
