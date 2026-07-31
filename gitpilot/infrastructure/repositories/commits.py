@@ -149,12 +149,7 @@ class CommitsRepository:
         max_age_minutes: int = 10,
     ) -> int:
         """Mark recent commits in the same branch+domain as squash candidates.
-        
-        Uses precise timestamp comparison: commits made within the last
-        `max_age_minutes` minutes that share the same branch and domain
-        are flagged as squash candidates.
-        
-        Returns the number of commits updated.
+        Returns number of commits updated (int, not bool).
         """
         threshold = (
             datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
@@ -173,13 +168,7 @@ class CommitsRepository:
             """,
             [project_id, branch, domain, threshold],
         )
-        updated = cursor.rowcount
-        if updated > 0:
-            logger.info(
-                "Marked %d commits as squash candidates (project=%d, branch=%s, domain=%s, window=%dm)",
-                updated, project_id, branch, domain, max_age_minutes,
-            )
-        return updated
+        return cursor.rowcount
 
     def clear_squash_candidates(
         self,
@@ -187,7 +176,7 @@ class CommitsRepository:
         branch: str,
         domain: Optional[str] = None,
     ) -> int:
-        """Clear squash candidate flags, e.g., after a squash is performed."""
+        """Clear squash candidate flags."""
         params = [project_id, branch]
         domain_cond = ""
         if domain:
@@ -208,6 +197,9 @@ class CommitsRepository:
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
         data = dict(row)
+        # Convert integer flag to Python bool
+        if "squash_candidate" in data and isinstance(data["squash_candidate"], int):
+            data["squash_candidate"] = bool(data["squash_candidate"])
         if data.get("affected_symbols"):
             try:
                 data["affected_symbols"] = json.loads(data["affected_symbols"])
