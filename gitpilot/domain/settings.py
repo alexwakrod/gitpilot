@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
     "ai_provider": "grok",
     "ai_model": "grok-2",
     "ai_temperature": 0.5,
-    "debounce_interval": 3,
+    "debounce_interval": 120,   # changed from 3 to 120
     "smart_grouping": True,
     "branch_aware_messages": True,
     "max_commit_retries": 3,
