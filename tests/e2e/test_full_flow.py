@@ -183,7 +183,12 @@ class TestEndToEndFlow:
             project_id = resp.json()["id"]
 
             lifecycle.start()
-            time.sleep(0.5)
+            time.sleep(2.0)
+                    # Wait up to 5 seconds for events
+            for _ in range(10):
+                if events:
+                    break
+                time.sleep(0.5)
 
             events = []
 
