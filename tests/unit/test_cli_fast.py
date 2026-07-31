@@ -38,8 +38,11 @@ class TestCLIFast:
         assert "Daemon is running" in result.output
 
     def test_add_project(self):
-        result = self.runner.invoke(cli, ["add", str(Path.home()), "--name", "t"])
-        assert "added" in result.output
+        with patch("gitpilot.cli.main._get_client") as mc:
+            mc.return_value.post.return_value.status_code = 201
+            mc.return_value.post.return_value.json.return_value = {"id": 1, "name": "test"}
+            result = self.runner.invoke(cli, ["add", str(Path.home()), "--name", "t"])
+            assert "added" in result.output
 
     def test_add_conflict(self):
         with patch("gitpilot.cli.main._get_client") as mc:
