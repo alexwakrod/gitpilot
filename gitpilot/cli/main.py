@@ -233,6 +233,7 @@ def _prompt_api_key_with_test(provider: str, default_key: str, model: str) -> st
         elif provider == "anthropic":
             ok = asyncio.run(_test_anthropic_api_key(key, model))
         elif provider == "qwen":
+            ok = asyncio.run(__test_qwen_api_key(key, model))
         if ok:
             console.print("[green]API key is valid.[/green]")
             return key
