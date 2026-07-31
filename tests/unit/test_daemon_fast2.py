@@ -77,12 +77,7 @@ class TestCLIAutoStartFast2:
 
     def test_run_setup_if_needed_triggers(self, monkeypatch, tmp_path):
         monkeypatch.setattr("gitpilot.cli.main.get_token_path", lambda: tmp_path / "noauth")
-        # Simulate Prompt.ask to avoid stdin capture
-        with patch("gitpilot.cli.main.Prompt.ask", return_value="grok"), \
-             patch("gitpilot.cli.main.Confirm.ask", return_value=False), \
-             patch("gitpilot.cli.main._prompt_api_key_with_test", return_value="key"):
-            with patch("gitpilot.cli.main.SettingsManager.load", return_value={}):
-                with patch("gitpilot.cli.main.console.print") as mp:
-                    _run_setup_if_needed()
-                    # Should have printed "First-run setup required"
-                    mp.assert_any_call()
+        with patch("gitpilot.cli.main.SettingsManager.load", return_value={}):
+            with patch("gitpilot.cli.main.setup.callback") as mock_setup:
+                _run_setup_if_needed()
+                mock_setup.assert_called_once()
