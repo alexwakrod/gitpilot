@@ -37,6 +37,7 @@ class TestEndToEndFlow:
         settings.set("enable_splitting", True)
         settings.set("enable_ai_grouping", False)   # <-- deterministic domain split
         settings.set("enable_optimizations", False)
+        settings.set("enable_precommit_checks", False)
         settings.save()
 
         token = generate_api_token()
