@@ -182,6 +182,23 @@ async def _test_ollama_connection(base_url: str, model: str) -> bool:
         console.print(f"[yellow]Could not connect to Ollama: {e}[/yellow]")
         return False
 
+async def _test_qwen_api_key(key: str, model: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": model, "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5},
+            )
+            if resp.status_code == 200:
+                return True
+            else:
+                console.print(f"[yellow]Qwen API returned {resp.status_code}: {resp.text[:200]}[/yellow]")
+                return False
+    except Exception as e:
+        console.print(f"[yellow]Error testing Qwen key: {e}[/yellow]")
+        return False
+
 def _validate_api_key_format(key: str, provider: str) -> bool:
     if not key or not key.strip():
         return False
