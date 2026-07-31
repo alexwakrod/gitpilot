@@ -1,6 +1,5 @@
-"""File watching service with debounce, native Git porcelain domain splitting,
-   optimization hints, file association learning, and behavior pattern tracking.
-   Only files recognised by `git status` are ever staged and committed."""
+"""File watching service with debounce, AI‑powered grouping, domain isolation,
+   optimization hints, file association learning, and behavior pattern tracking."""
 
 import asyncio
 import hashlib
@@ -15,7 +14,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from watchdog.observers import Observer
 
-from gitpilot.core import git_utils  # native Git porcelain
+from gitpilot.core import git_utils
 from gitpilot.core.executor import GitExecutor
 from gitpilot.core.committer import AICommitter
 from gitpilot.core.notifications import send_discord_notification
@@ -35,8 +34,6 @@ logger = logging.getLogger("gitpilot.watcher")
 
 
 class FileHashCache:
-    """In‑memory mapping of file paths to MD5 hashes with TTL."""
-
     def __init__(self, ttl: int = 60):
         self._cache: Dict[str, Tuple[str, float]] = {}
         self._ttl = ttl
@@ -59,8 +56,6 @@ class FileHashCache:
 
 
 class ChangeAccumulator:
-    """Accumulates file changes during a debounce window (ignored at commit time)."""
-
     def __init__(self):
         self._changes: Set[Path] = set()
         self._last_event_time = time.time()
@@ -84,10 +79,8 @@ class ChangeAccumulator:
 
 
 class ProjectWatcher:
-    """Watches a single project directory.  At debounce expiry it asks Git
-       which files are actually changed (`git status --porcelain -z`) and
-       commits them grouped by domain.  Files outside the Git view are
-       silently ignored."""
+    """Watches a single project directory, uses AI to group related changes,
+       commits each group separately, learns associations and patterns."""
 
     def __init__(
         self,
@@ -95,8 +88,9 @@ class ProjectWatcher:
         project_id: int,
         executor: GitExecutor,
         committer: AICommitter,
-        debounce_interval: float = 3.0,
+        debounce_interval: float = 120.0,
         enable_splitting: bool = True,
+        enable_ai_grouping: bool = True,
         enable_optimizations: bool = False,
         branch_aware: bool = True,
         discord_webhook_enabled: bool = False,
@@ -110,6 +104,7 @@ class ProjectWatcher:
         self.committer = committer
         self.debounce_interval = debounce_interval
         self.enable_splitting = enable_splitting
+        self.enable_ai_grouping = enable_ai_grouping
         self.enable_optimizations = enable_optimizations
         self.branch_aware = branch_aware
         self.discord_webhook_enabled = discord_webhook_enabled
@@ -127,11 +122,11 @@ class ProjectWatcher:
         self.commit_splitter = CommitSplitter(
             classifier=self.domain_classifier,
             enable_splitting=self.enable_splitting,
+            ai_committer=self.committer if self.enable_ai_grouping else None,
+            project_root=self.project_path,
+            use_ai_grouping=self.enable_ai_grouping,
         )
 
-    # ------------------------------------------------------------------
-    # Watchdog event handler
-    # ------------------------------------------------------------------
     def handle_change(self, event: FileSystemEvent) -> None:
         if not self._running:
             return
@@ -195,82 +190,60 @@ class ProjectWatcher:
         except Exception as exc:
             logger.debug("Predictive fetch failed: %s", exc)
 
-    # ------------------------------------------------------------------
-    # Debounce expiry → ask Git, not the accumulator
-    # ------------------------------------------------------------------
     def _on_debounce_expired(self) -> None:
         with self._lock:
-            # Clear the timer; we don't need the accumulated list anymore.
             pass
         self._process_actual_changes()
 
     def _process_actual_changes(self) -> None:
-        """
-        Query `git status --porcelain -z` to get the real set of changed
-        files that Git cares about.  Ignore everything else.
-        """
         changes = git_utils.get_porcelain_status(self.project_path)
         if not changes:
             return
 
-        # Collect relative file paths (GitChange.file_path is already relative)
         rel_paths: List[Path] = []
         for c in changes:
-            # Only stage files that exist (skip deleted files)
             abs_path = self.project_path / c.file_path
             if c.is_deleted:
-                # Deleted files should be staged as well (git rm)
                 rel_paths.append(c.file_path)
             elif abs_path.exists():
                 rel_paths.append(c.file_path)
-            else:
-                logger.debug("Skipping non-existent file: %s", c.file_path)
 
         if not rel_paths:
             return
 
-        # Classify by domain
+        # Use AI‑powered grouping or domain split
         commit_plan = self.commit_splitter.commit_plan(
             files=[self.project_path / p for p in rel_paths],
             project_root=self.project_path,
+            project_id=self.project_id,
         )
 
         for plan_item in commit_plan:
             try:
                 self._commit_domain_group(
                     rel_paths=[self.project_path / p for p in plan_item["files"]],
-                    domain=plan_item["domain"],
-                    suggested_scope=plan_item["suggested_scope"],
+                    domain=plan_item.get("domain", "general"),
+                    suggested_scope=plan_item.get("suggested_scope", "misc"),
                 )
             except Exception as exc:
                 logger.exception(
-                    "Failed to process domain group %s: %s",
-                    plan_item["domain"], exc,
+                    "Failed to process commit group %s: %s",
+                    plan_item.get("domain", "?"), exc,
                 )
 
-    # ------------------------------------------------------------------
-    # Commit one domain group
-    # ------------------------------------------------------------------
     def _commit_domain_group(
         self,
         rel_paths: List[Path],
         domain: str,
         suggested_scope: str,
     ) -> None:
-        """Stage only the files belonging to this domain, generate message, commit, push."""
-        # Reset index to a clean state
         if not git_utils.reset_index(self.project_path):
-            logger.error("Failed to reset index for domain staging")
             return
-
-        # Stage the files (they are already absolute, stage_specific_files converts to relative)
         if not git_utils.stage_specific_files(self.project_path, rel_paths):
-            logger.error("Failed to stage files for domain %s", domain)
             return
 
         diff = git_utils.get_staged_diff(self.project_path)
         if not diff or diff.strip() == "":
-            logger.info("Empty diff for domain %s, skipping commit", domain)
             return
 
         branch = None
@@ -305,12 +278,10 @@ class ProjectWatcher:
 
         commit_hash = self.executor.commit(self.project_path, message)
         if not commit_hash:
-            logger.error("Commit failed for domain %s", domain)
             return
 
         logger.info("Committed [%s] %s: %s", domain, commit_hash[:8], message)
 
-        # Record commit in DB
         try:
             with managed_connection() as conn:
                 repo = CommitsRepository(conn)
@@ -333,13 +304,9 @@ class ProjectWatcher:
         except Exception as exc:
             logger.exception("Failed to log commit to DB: %s", exc)
 
-        # Learn file associations
         self._learn_file_associations(rel_paths)
-
-        # Learn behavior patterns
         self._learn_behavior_patterns(message, branch or "main", domain)
 
-        # Push
         push_success, push_error = asyncio.run(self.executor.push_with_retry(self.project_path))
         if not push_success:
             logger.error("Push failed: %s", push_error)
@@ -355,7 +322,6 @@ class ProjectWatcher:
                     timestamp=datetime.now(timezone.utc).isoformat(),
                 )
 
-        # Discord notification
         if self.discord_webhook_enabled:
             try:
                 with managed_connection() as conn:
@@ -383,9 +349,6 @@ class ProjectWatcher:
                 last_event=datetime.now(timezone.utc).isoformat(),
             )
 
-    # ------------------------------------------------------------------
-    # Learning helpers
-    # ------------------------------------------------------------------
     def _learn_file_associations(self, files: List[Path]) -> None:
         try:
             with managed_connection() as conn:
@@ -439,8 +402,9 @@ class WatcherService:
         self,
         executor: GitExecutor,
         committer: AICommitter,
-        debounce_interval: float = 3.0,
+        debounce_interval: float = 120.0,
         enable_splitting: bool = True,
+        enable_ai_grouping: bool = True,
         enable_optimizations: bool = False,
         discord_webhook_enabled: bool = False,
         on_commit_completed: Optional[Callable] = None,
@@ -451,6 +415,7 @@ class WatcherService:
         self.committer = committer
         self.debounce_interval = debounce_interval
         self.enable_splitting = enable_splitting
+        self.enable_ai_grouping = enable_ai_grouping
         self.enable_optimizations = enable_optimizations
         self.discord_webhook_enabled = discord_webhook_enabled
         self.on_commit_completed = on_commit_completed
@@ -478,6 +443,7 @@ class WatcherService:
             committer=self.committer,
             debounce_interval=self.debounce_interval,
             enable_splitting=self.enable_splitting,
+            enable_ai_grouping=self.enable_ai_grouping,
             enable_optimizations=self.enable_optimizations,
             branch_aware=True,
             discord_webhook_enabled=self.discord_webhook_enabled,

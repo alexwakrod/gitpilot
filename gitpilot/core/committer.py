@@ -1,4 +1,4 @@
-"""AI provider adapter (strategy pattern) with domain‑scope hint support."""
+"""AI provider adapter (strategy pattern) with domain‑scope hint and custom prompt support."""
 
 import logging
 import re
@@ -52,14 +52,14 @@ def clean_commit_message(raw: str) -> str:
     cleaned = re.sub(r"^[-*]\s+", "", cleaned.strip())
     cleaned = re.sub(r"^(here is the commit message:?\s*)", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^(the commit message is:?\s*)", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\n{2,}", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     if cleaned.startswith("(") and cleaned.endswith(")"):
         cleaned = cleaned[1:-1].strip()
     return cleaned.strip()
 
 
 class AICommitter:
-    """Strategy-based AI committer with domain‑scope hint support."""
+    """Strategy-based AI committer with domain‑scope hint and custom prompt support."""
 
     def __init__(
         self,
@@ -94,8 +94,16 @@ class AICommitter:
         diff: str,
         branch: Optional[str] = None,
         scope_hint: Optional[str] = None,
+        custom_prompt: Optional[str] = None,
     ) -> Optional[str]:
-        prompt = build_commit_prompt(diff, branch, scope_hint)
+        """Generate a commit message using the configured AI provider.
+        
+        If `custom_prompt` is provided, it overrides the diff‑based prompt.
+        """
+        if custom_prompt:
+            prompt = custom_prompt
+        else:
+            prompt = build_commit_prompt(diff, branch, scope_hint)
 
         try:
             if self.provider == "grok":
