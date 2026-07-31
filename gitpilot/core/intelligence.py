@@ -1,7 +1,7 @@
-"""Intelligence Engine: atomic, AI‑powered commit grouping that never splits
-   related modifications.  Multi‑layered: hard atomic rules → AI → domain fallback."""
+"""Intelligence Engine: atomic, context‑aware AI‑powered commit grouping, domain classification, and optimization hints."""
 
 import ast
+import asyncio
 import json
 import logging
 import re
@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 logger = logging.getLogger("gitpilot.intelligence")
 
 # ---------------------------------------------------------------------------
-# Domain rules (unchanged – used only as last resort)
+# Domain rules (unchanged)
 # ---------------------------------------------------------------------------
 DOMAIN_RULES: Dict[str, List[str]] = {
     "test": [
@@ -45,70 +45,9 @@ DJANGO_ORM_MODULES = {"django.db", "django.contrib"}
 ORM_CLASSES = {"Model", "models.Model"}
 UI_FRAMEWORKS = {"tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6", "wx", "kivy"}
 
-# ---------------------------------------------------------------------------
-# Atomic group detection – hard rules that must never be split
-# ---------------------------------------------------------------------------
-class AtomicGroupDetector:
-    """Pre‑analyses a set of changed files and merges them into atomic groups
-       based on hard‑coded semantic rules.  These groups override AI and domain
-       splitting – they are NEVER broken apart."""
-
-    # Known atomic file patterns: any change touching these files together
-    # is considered part of the same logical modification.
-    ATOMIC_PATTERNS = [
-        # Version bump trilogy
-        {r"(^|/)pyproject\.toml$", r"(^|/)gitpilot/__init__\.py$", r"(^|/)gitpilot/cli/main\.py$"},
-        # Config + related code
-        {r"(^|/)settings\.py$", r"(^|/)config\.py$"},
-        # Model + migration
-        {r"(^|/)models\.py$", r".*/migrations/.*\.py$"},
-        # Test + source
-        {r"(^|/)tests/.*\.py$", r"(^|/)(?!tests/).*\.py$"},
-    ]
-
-    @classmethod
-    def detect(cls, files: List[Path]) -> List[Set[Path]]:
-        """Return a list of sets, each set containing files that MUST be committed
-           together.  Unmatched files are returned as individual sets."""
-        remaining = set(files)
-        groups: List[Set[Path]] = []
-
-        for pattern_set in cls.ATOMIC_PATTERNS:
-            # Collect all files matching any regex in the pattern set
-            matched = set()
-            for file in list(remaining):
-                for regex in pattern_set:
-                    if re.search(regex, str(file)):
-                        matched.add(file)
-                        break
-            if len(matched) >= 2:
-                # Found an atomic group → merge them
-                groups.append(matched)
-                remaining -= matched
-
-        # Remaining files become singletons
-        for f in sorted(remaining, key=str):
-            groups.append({f})
-
-        # Merge overlapping groups (if a file appears in two atomic patterns, merge groups)
-        merged = True
-        while merged:
-            merged = False
-            for i in range(len(groups)):
-                for j in range(i + 1, len(groups)):
-                    if groups[i] & groups[j]:
-                        groups[i] |= groups[j]
-                        del groups[j]
-                        merged = True
-                        break
-                if merged:
-                    break
-
-        return groups
-
 
 # ===========================================================================
-# Domain classifier (unchanged)
+# Domain classifier 
 # ===========================================================================
 class DomainClassifier:
     def __init__(self, user_map_path: Optional[Path] = None):
@@ -205,23 +144,59 @@ class DomainClassifier:
 
 
 # ===========================================================================
-# AI‑powered commit grouper
+# Atomic group detector (unchanged)
+# ===========================================================================
+class AtomicGroupDetector:
+    ATOMIC_PATTERNS = [
+        {r"(^|/)pyproject\.toml$", r"(^|/)gitpilot/__init__\.py$", r"(^|/)gitpilot/cli/main\.py$"},
+        {r"(^|/)settings\.py$", r"(^|/)config\.py$"},
+        {r"(^|/)models\.py$", r".*/migrations/.*\.py$"},
+        {r"(^|/)tests/.*\.py$", r"(^|/)(?!tests/).*\.py$"},
+    ]
+
+    @classmethod
+    def detect(cls, files: List[Path]) -> List[Set[Path]]:
+        remaining = set(files)
+        groups: List[Set[Path]] = []
+        for pattern_set in cls.ATOMIC_PATTERNS:
+            matched = set()
+            for file in list(remaining):
+                for regex in pattern_set:
+                    if re.search(regex, str(file)):
+                        matched.add(file)
+                        break
+            if len(matched) >= 2:
+                groups.append(matched)
+                remaining -= matched
+        for f in sorted(remaining, key=str):
+            groups.append({f})
+        merged = True
+        while merged:
+            merged = False
+            for i in range(len(groups)):
+                for j in range(i + 1, len(groups)):
+                    if groups[i] & groups[j]:
+                        groups[i] |= groups[j]
+                        del groups[j]
+                        merged = True
+                        break
+                if merged:
+                    break
+        return groups
+
+
+# ===========================================================================
+# AI‑powered commit grouper (context‑aware)
 # ===========================================================================
 class AICommitGrouper:
-    """Uses the configured AI provider to group files into logical commits.
-       The prompt is extremely strict – splitting is only allowed when the AI
-       is confident the changes are truly independent."""
-
     def __init__(self, ai_committer, project_root: Path):
         self.ai = ai_committer
         self.project_root = project_root
         self.classifier = DomainClassifier()
 
-    async def group_files(self, files: List[Path]) -> List[Dict[str, Any]]:
-        """Ask the AI to group changed files by their semantic intent and
-           return a list of groups, each with a short description and the file list.
-           The description will be used directly as the commit message.
-        """
+    async def group_files(
+        self, files: List[Path], project_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         if len(files) <= 1:
             return [{"description": "chore: update files", "files": files, "suggested_scope": "general"}]
 
@@ -239,10 +214,28 @@ class AICommitGrouper:
                 pass
             file_desc.append(f"  {rel}  (domain: {domain})  [{preview}]")
 
+        # Build context from recent commits
+        context = ""
+        if project_id is not None:
+            try:
+                from gitpilot.infrastructure.db import managed_connection
+                from gitpilot.infrastructure.repositories.commits import CommitsRepository
+                with managed_connection() as conn:
+                    repo = CommitsRepository(conn)
+                    recent, _ = repo.list_by_project(project_id, limit=10)
+                if recent:
+                    context = "Recent commits in this project (most recent first):\n"
+                    for c in recent:
+                        context += f"  {c['hash'][:8]} {c['message']} ({c['branch']})\n"
+                    context += "\n"
+            except Exception as exc:
+                logger.debug("Failed to fetch recent commits for context: %s", exc)
+
         prompt = (
             "You are an expert developer assistant.  A developer has just modified "
             "several files in their project.  Your job is to understand the *intent* "
             "behind the changes and group the files into logical commits.\n\n"
+            + context +
             "For each group, write a short conventional‑commit message (type(scope): description) "
             "that explains the true purpose of that group of changes.  Then list the relative "
             "file paths that belong to that group.\n\n"
@@ -291,7 +284,7 @@ class AICommitGrouper:
                     result.append({
                         "description": group.get("description", "chore: update files"),
                         "files": paths,
-                        "suggested_scope": "general",  # will be overridden by description scope if needed
+                        "suggested_scope": "general",
                     })
             if result:
                 result = self._enforce_atomic_merge(files, result)
@@ -302,19 +295,13 @@ class AICommitGrouper:
             logger.warning("AI grouping failed (%s) – falling back to mixed commit", exc)
             return self._fallback_mixed(files)
 
-
     def _fallback_mixed(self, files: List[Path]) -> List[Dict[str, Any]]:
         return [{"description": "chore: batch update", "files": files, "suggested_scope": "mixed"}]
 
     def _enforce_atomic_merge(
-        self,
-        all_files: List[Path],
-        groups: List[Dict[str, Any]],
+        self, all_files: List[Path], groups: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """If any atomic group (as detected by hard rules) is split across
-           multiple AI‑generated groups, merge those groups."""
         atomic_sets = AtomicGroupDetector.detect(all_files)
-        # Build a mapping: file -> group index
         file_to_group: Dict[Path, int] = {}
         for idx, g in enumerate(groups):
             for f in g["files"]:
@@ -327,16 +314,13 @@ class AICommitGrouper:
                 if f in file_to_group:
                     group_indices.add(file_to_group[f])
             if len(group_indices) > 1:
-                # AI split an atomic group → merge all those groups into one
                 main_idx = min(group_indices)
                 for idx in group_indices:
                     if idx != main_idx:
                         groups[main_idx]["files"].extend(groups[idx]["files"])
                         merged_indices.add(idx)
-        # Remove merged groups
         if merged_indices:
             groups = [g for i, g in enumerate(groups) if i not in merged_indices]
-            # Deduplicate files
             seen = set()
             for g in groups:
                 g["files"] = [f for f in g["files"] if not (f in seen or seen.add(f))]
@@ -347,13 +331,6 @@ class AICommitGrouper:
 # Commit splitter (orchestrator)
 # ===========================================================================
 class CommitSplitter:
-    """Splits a list of changed files into commit groups.
-       Order of precedence:
-       1. Hard atomic rules (AtomicGroupDetector) – never split these.
-       2. AI grouping (if enabled) – with post‑validation atomic merging.
-       3. Domain splitting – only if AI is disabled (never used as fallback for AI).
-    """
-
     def __init__(
         self,
         classifier: DomainClassifier,
@@ -374,15 +351,10 @@ class CommitSplitter:
         project_root: Optional[Path] = None,
         project_id: Optional[int] = None,
     ) -> Dict[str, List[Path]]:
-        # When splitting is disabled, everything goes into one “general” group
         if not self.enable_splitting:
             return {"general": files}
-
-        # When AI grouping is active, the “mixed” group preserves all files together
         if self.ai_grouper:
             return {"mixed": files}
-
-        # Classic domain‑based split (AI grouping off)
         groups: Dict[str, List[Path]] = {}
         for f in files:
             domain = self.classifier.classify(f, project_root)
@@ -401,31 +373,24 @@ class CommitSplitter:
         if not self.enable_splitting:
             return [{"files": files, "suggested_scope": "mixed", "domain": "mixed"}]
 
-        # If AI grouping is enabled, use the full pipeline (atomic + AI)
         if self.ai_grouper:
-            import asyncio
             try:
-                plan = asyncio.run(self.ai_grouper.group_files(files))
+                plan = asyncio.run(self.ai_grouper.group_files(files, project_id))
                 if plan:
                     for item in plan:
                         item["domain"] = item.get("suggested_scope", "mixed")
                     return plan
             except Exception as exc:
                 logger.warning("AI grouping failed: %s", exc)
-            # Fallback for AI‑on failures: one mixed group
             return [{"files": files, "suggested_scope": "mixed", "domain": "mixed"}]
 
-        # AI grouping disabled → classic domain split (unchanged behaviour)
         groups = self.split(files, project_root, project_id)
         plan = []
         for domain, domain_files in groups.items():
             scope = domain if domain != "general" else "misc"
-            plan.append({
-                "domain": domain,
-                "files": domain_files,
-                "suggested_scope": scope,
-            })
+            plan.append({"domain": domain, "files": domain_files, "suggested_scope": scope})
         return plan
+
 
 # ===========================================================================
 # Optimization scanner (unchanged)

@@ -214,14 +214,14 @@ class TestDomainClassifierAdditional:
 class TestCommitSplitterPlan:
     def test_commit_plan_general_domain(self):
         c = DomainClassifier()
-        splitter = CommitSplitter(c, enable_splitting=True)
+        splitter = CommitSplitter(c, enable_splitting=True, use_ai_grouping=False)
         plan = splitter.commit_plan([Path("random.xyz")])
-        assert plan[0]["domain"] == "mixed"
-
+        assert plan[0]["domain"] == "general"
+        assert plan[0]["suggested_scope"] == "misc"
 
     def test_commit_plan_ui(self):
         c = DomainClassifier()
-        splitter = CommitSplitter(c)
+        splitter = CommitSplitter(c, use_ai_grouping=False)
         plan = splitter.commit_plan([Path("components/Button.jsx")])
         assert plan[0]["suggested_scope"] == "ui"
 
