@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -21,8 +22,6 @@ from gitpilot.cli.main import (
     _get_daemon_port,
     _get_api_token,
     _get_client,
-    MainMenu,
-    DirectoryPicker,
 )
 from gitpilot.core.project_setup import is_git_repo, ensure_initial_commit
 from gitpilot.daemon.lifecycle import DaemonLifecycle
@@ -32,9 +31,6 @@ from gitpilot.domain.policies import get_token_path
 from gitpilot.infrastructure.db import initialize_database
 
 
-# ===========================================================================
-# Helpers
-# ===========================================================================
 def _mock_client(status=200, json_data=None):
     """Create a fake httpx.Client that returns the given status and JSON."""
     client = MagicMock()
@@ -49,37 +45,51 @@ def _mock_client(status=200, json_data=None):
     return client
 
 
-# ===========================================================================
-# Test CLI commands with mocked daemon
-# ===========================================================================
 class TestCLICommands:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch, tmp_path):
         """Mock the daemon port, token, and client so commands don't fail."""
         monkeypatch.setattr("gitpilot.cli.main._get_daemon_port", lambda: 12345)
         monkeypatch.setattr("gitpilot.cli.main._get_api_token", lambda: "faketoken")
-        # Always return a mocked client
         fake_client = _mock_client()
         monkeypatch.setattr("gitpilot.cli.main._get_client", lambda: fake_client)
-        self.client = fake_client
-        # Also prevent auto-starting daemon background process
+        # Mock httpx.get used by daemon_status command
+        monkeypatch.setattr("httpx.get", MagicMock(return_value=_mock_client(200).get.return_value))
+        # Prevent auto-starting daemon background process
         monkeypatch.setattr("gitpilot.cli.main._run_setup_if_needed", lambda: None)
-        # Prevent TUI from launching (click.testing will invoke the command directly)
+        self.client = fake_client
         self.runner = CliRunner()
 
     def test_daemon_status(self):
         result = self.runner.invoke(cli, ["daemon-status"])
         assert "Daemon is running" in result.output
 
-    def test_add_project(self):
+    def test_add_project(self, tmp_path):
+        # Create a temporary git repo so _prepare_project_directory succeeds
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, capture_output=True)
+        (repo / "file").write_text("x")
+        subprocess.run(["git", "add", "file"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
         self.client.post.return_value.status_code = 201
         self.client.post.return_value.json.return_value = {"id": 1, "name": "test"}
-        result = self.runner.invoke(cli, ["add", str(Path.home()), "--name", "test"])
+        result = self.runner.invoke(cli, ["add", str(repo), "--name", "test"])
         assert "added" in result.output
 
-    def test_add_project_conflict(self):
+    def test_add_project_conflict(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, capture_output=True)
+        (repo / "file").write_text("x")
+        subprocess.run(["git", "add", "file"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
         self.client.post.return_value.status_code = 409
-        result = self.runner.invoke(cli, ["add", str(Path.home()), "--name", "test"])
+        result = self.runner.invoke(cli, ["add", str(repo), "--name", "test"])
         assert "already registered" in result.output
 
     def test_status(self):
@@ -126,37 +136,46 @@ class TestCLICommands:
         assert "Not a Git repository" in result.output
 
     def test_suggest(self, monkeypatch, tmp_path):
-        # Mock the DB connection and list of projects
-        monkeypatch.setattr("gitpilot.infrastructure.db.managed_connection", lambda *a, **kw: MagicMock())
-        result = self.runner.invoke(cli, ["suggest"])
-        assert "No squash suggestions" in result.output or "Squash Suggestions" in result.output
+        # Mock the DB and repositories
+        monkeypatch.setattr("gitpilot.cli.main.managed_connection", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr("gitpilot.cli.main.ProjectsRepository", MagicMock())
+        monkeypatch.setattr("gitpilot.cli.main.CommitsRepository", MagicMock())
+        with patch("gitpilot.cli.main.ProjectsRepository.list_all", return_value=([], None)):
+            with patch("gitpilot.cli.main.CommitsRepository.list_by_project", return_value=([], None)):
+                result = self.runner.invoke(cli, ["suggest"])
+                assert "No squash suggestions" in result.output or "Squash Suggestions" in result.output
 
     def test_optimize_not_git(self):
         result = self.runner.invoke(cli, ["optimize", str(Path.home())])
         assert "Not a Git repository" in result.output
 
     def test_stats(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("gitpilot.infrastructure.db.managed_connection", lambda *a, **kw: MagicMock())
-        result = self.runner.invoke(cli, ["stats"])
-        assert "No learned patterns" in result.output or "Learned Patterns" in result.output
+        monkeypatch.setattr("gitpilot.cli.main.managed_connection", lambda *a, **kw: MagicMock())
+        monkeypatch.setattr("gitpilot.cli.main.PatternsRepository", MagicMock())
+        monkeypatch.setattr("gitpilot.cli.main.CommitsRepository", MagicMock())
+        monkeypatch.setattr("gitpilot.cli.main.ProjectsRepository", MagicMock())
+        with patch("gitpilot.cli.main.PatternsRepository.list_by_owner", return_value=[]):
+            with patch("gitpilot.cli.main.ProjectsRepository.list_all", return_value=([], None)):
+                result = self.runner.invoke(cli, ["stats"])
+                assert "No learned patterns" in result.output
 
     def test_config_review(self):
-        # Just ensure it sets the config without crashing
         with patch.object(SettingsManager, "set") as mock_set:
             result = self.runner.invoke(cli, ["config-review", "on"])
             assert result.exit_code == 0
 
     def test_watch(self):
-        # watch command needs a real daemon; it will fail but we verify it doesn't crash
-        with patch("httpx.AsyncClient.stream") as mock_stream:
+        # Properly mock async stream for SSE
+        async def async_stream():
+            yield f"event: connected\ndata: {json.dumps({'status': 'connected'})}\n\n"
+        mock_stream = MagicMock()
+        mock_stream.return_value.__aiter__.return_value = async_stream()
+        with patch("httpx.AsyncClient.stream", mock_stream):
             result = self.runner.invoke(cli, ["watch"])
-            # It may print an error because it can't connect; that's acceptable
+            # watch command should not crash
             assert result.exit_code == 0
 
 
-# ===========================================================================
-# Key validation
-# ===========================================================================
 class TestKeyValidation:
     def test_validate_grok_valid(self):
         assert _validate_api_key_format("xai-something", "grok") is True
@@ -184,9 +203,6 @@ class TestKeyValidation:
         assert _validate_api_key_format(None, "grok") is False
 
 
-# ===========================================================================
-# Project readiness check
-# ===========================================================================
 class TestPrepareProjectDirectory:
     def test_existing_repo_ready(self, tmp_path, monkeypatch):
         repo = tmp_path / "repo"
@@ -199,7 +215,6 @@ class TestPrepareProjectDirectory:
         subprocess.run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
         settings_mgr = SettingsManager(config_path=tmp_path / "config.json")
         settings_mgr.load()
-        # Ensure it returns True and prints green checkmarks
         with patch("gitpilot.cli.main.Confirm.ask", return_value=False):
             assert _prepare_project_directory(repo, settings_mgr) is True
 
@@ -208,7 +223,6 @@ class TestPrepareProjectDirectory:
         plain_dir.mkdir()
         settings_mgr = SettingsManager(config_path=tmp_path / "config.json")
         settings_mgr.load()
-        # User says "no" to init git – should return False
         with patch("gitpilot.cli.main.Confirm.ask", return_value=False):
             assert _prepare_project_directory(plain_dir, settings_mgr) is False
 
@@ -217,15 +231,11 @@ class TestPrepareProjectDirectory:
         plain_dir.mkdir()
         settings_mgr = SettingsManager(config_path=tmp_path / "config.json")
         settings_mgr.load()
-        # User says "yes" to init git
         with patch("gitpilot.cli.main.Confirm.ask", return_value=True):
             assert _prepare_project_directory(plain_dir, settings_mgr) is True
             assert (plain_dir / ".git").exists()
 
 
-# ===========================================================================
-# Daemon lifecycle startup checks
-# ===========================================================================
 class TestDaemonLifecycleStartup:
     def test_verify_global_git_config(self, monkeypatch):
         config = {"debounce_interval": 120, "max_commit_retries": 3}
@@ -242,7 +252,6 @@ class TestDaemonLifecycleStartup:
 
         config = {"debounce_interval": 120}
         lifecycle = DaemonLifecycle(config)
-        # Add a project with non-existent path
         from gitpilot.infrastructure.db import managed_connection
         with managed_connection(tmp_path / "data.db") as conn:
             conn.execute("INSERT INTO projects (name,path,owner) VALUES (?,?,?)",
@@ -251,23 +260,7 @@ class TestDaemonLifecycleStartup:
         lifecycle._validate_registered_projects()
 
 
-# ===========================================================================
-# SSE event broadcasting
-# ===========================================================================
 class TestSSEBroadcasting:
-    def test_broadcast_event_safe_no_loop(self, caplog):
-        # With no main loop, broadcast should log a warning
-        from gitpilot.daemon.app import _main_loop, sse_clients, sse_lock
-        # Ensure _main_loop is None
-        import gitpilot.daemon.app as app_module
-        app_module._main_loop = None
-        # Call the safe broadcast function (it's defined inside create_app, so we need a minimal app)
-        # Instead, test directly the warning path by calling the underlying logic
-        with patch.object(app_module, "_main_loop", None):
-            # We'll just assert that a warning is logged if we could call it; but since
-            # _broadcast_event_safe is a closure, we'll trust the code path.
-            pass  # Covered by E2E tests where main loop is set
-
     def test_create_app_sets_callbacks(self):
         lifecycle = DaemonLifecycle({})
         app = create_app(api_token="test", lifecycle=lifecycle, config={})
@@ -276,9 +269,6 @@ class TestSSEBroadcasting:
         assert lifecycle.on_watcher_status is not None
 
 
-# ===========================================================================
-# Additional edge cases for helpers
-# ===========================================================================
 class TestHelpers:
     def test_get_daemon_port_no_file(self, monkeypatch, tmp_path):
         monkeypatch.setattr("gitpilot.cli.main.get_token_path", lambda: tmp_path / "nonexistent")
@@ -286,9 +276,9 @@ class TestHelpers:
 
     def test_get_client_no_daemon(self, monkeypatch):
         monkeypatch.setattr("gitpilot.cli.main._get_daemon_port", lambda: None)
-        with patch("sys.exit") as mock_exit:
-            _get_client()
-            mock_exit.assert_called_once()
+        # _get_client prints an error and returns None; it does not call sys.exit
+        client = _get_client()
+        assert client is None
 
     def test_spawn_new_terminal_linux(self, monkeypatch):
         monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/xterm" if x == "xterm" else None)
@@ -298,7 +288,5 @@ class TestHelpers:
             mock_exit.assert_called_once()
 
     def test_key_format_edge_cases(self):
-        assert not _validate_api_key_format("xai", "grok")  # too short but still valid? yes, prefix is "xai-"
-        # Actually "xai" doesn't start with "xai-" so it returns False
         assert not _validate_api_key_format("xai", "grok")
         assert _validate_api_key_format("xai-123", "grok") is True
