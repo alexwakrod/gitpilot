@@ -1,5 +1,6 @@
 """File watching service with debounce, native Git porcelain domain splitting,
-   optimization hints, file association learning, and behavior pattern tracking."""
+   optimization hints, file association learning, and behavior pattern tracking.
+   Only files recognised by `git status` are ever staged and committed."""
 
 import asyncio
 import hashlib
@@ -58,7 +59,7 @@ class FileHashCache:
 
 
 class ChangeAccumulator:
-    """Accumulates file changes during a debounce window."""
+    """Accumulates file changes during a debounce window (ignored at commit time)."""
 
     def __init__(self):
         self._changes: Set[Path] = set()
@@ -81,13 +82,12 @@ class ChangeAccumulator:
     def last_event(self) -> float:
         return self._last_event_time
 
-    def group_changes(self) -> List[List[Path]]:
-        return [self.reset()]
-
 
 class ProjectWatcher:
-    """Watches a single project directory, commits domain‑separated changes
-       using native Git porcelain, learns file associations, and updates user patterns."""
+    """Watches a single project directory.  At debounce expiry it asks Git
+       which files are actually changed (`git status --porcelain -z`) and
+       commits them grouped by domain.  Files outside the Git view are
+       silently ignored."""
 
     def __init__(
         self,
@@ -106,7 +106,7 @@ class ProjectWatcher:
     ):
         self.project_path = project_path
         self.project_id = project_id
-        self.executor = executor       # only for commit/push; staging/diff uses git_utils
+        self.executor = executor
         self.committer = committer
         self.debounce_interval = debounce_interval
         self.enable_splitting = enable_splitting
@@ -129,6 +129,9 @@ class ProjectWatcher:
             enable_splitting=self.enable_splitting,
         )
 
+    # ------------------------------------------------------------------
+    # Watchdog event handler
+    # ------------------------------------------------------------------
     def handle_change(self, event: FileSystemEvent) -> None:
         if not self._running:
             return
@@ -192,44 +195,77 @@ class ProjectWatcher:
         except Exception as exc:
             logger.debug("Predictive fetch failed: %s", exc)
 
+    # ------------------------------------------------------------------
+    # Debounce expiry → ask Git, not the accumulator
+    # ------------------------------------------------------------------
     def _on_debounce_expired(self) -> None:
         with self._lock:
-            if self.accumulator.size == 0:
-                return
-            all_files = self.accumulator.reset()
-        self._process_files(all_files)
+            # Clear the timer; we don't need the accumulated list anymore.
+            pass
+        self._process_actual_changes()
 
-    def _process_files(self, files: List[Path]) -> None:
+    def _process_actual_changes(self) -> None:
+        """
+        Query `git status --porcelain -z` to get the real set of changed
+        files that Git cares about.  Ignore everything else.
+        """
+        changes = git_utils.get_porcelain_status(self.project_path)
+        if not changes:
+            return
+
+        # Collect relative file paths (GitChange.file_path is already relative)
+        rel_paths: List[Path] = []
+        for c in changes:
+            # Only stage files that exist (skip deleted files)
+            abs_path = self.project_path / c.file_path
+            if c.is_deleted:
+                # Deleted files should be staged as well (git rm)
+                rel_paths.append(c.file_path)
+            elif abs_path.exists():
+                rel_paths.append(c.file_path)
+            else:
+                logger.debug("Skipping non-existent file: %s", c.file_path)
+
+        if not rel_paths:
+            return
+
+        # Classify by domain
         commit_plan = self.commit_splitter.commit_plan(
-            files=files,
+            files=[self.project_path / p for p in rel_paths],
             project_root=self.project_path,
         )
+
         for plan_item in commit_plan:
             try:
                 self._commit_domain_group(
-                    files=plan_item["files"],
+                    rel_paths=[self.project_path / p for p in plan_item["files"]],
                     domain=plan_item["domain"],
                     suggested_scope=plan_item["suggested_scope"],
                 )
             except Exception as exc:
                 logger.exception(
-                    "Failed to process domain group %s for project %d: %s",
-                    plan_item["domain"], self.project_id, exc,
+                    "Failed to process domain group %s: %s",
+                    plan_item["domain"], exc,
                 )
 
+    # ------------------------------------------------------------------
+    # Commit one domain group
+    # ------------------------------------------------------------------
     def _commit_domain_group(
         self,
-        files: List[Path],
+        rel_paths: List[Path],
         domain: str,
         suggested_scope: str,
     ) -> None:
-        """Stage only the domain's files (native Git porcelain), generate message, commit, push."""
-        # Reset index to a clean state, then stage only our domain's files
+        """Stage only the files belonging to this domain, generate message, commit, push."""
+        # Reset index to a clean state
         if not git_utils.reset_index(self.project_path):
-            logger.error("Failed to reset index for domain staging in project %d", self.project_id)
+            logger.error("Failed to reset index for domain staging")
             return
-        if not git_utils.stage_specific_files(self.project_path, files):
-            logger.error("Failed to stage files for domain %s in project %d", domain, self.project_id)
+
+        # Stage the files (they are already absolute, stage_specific_files converts to relative)
+        if not git_utils.stage_specific_files(self.project_path, rel_paths):
+            logger.error("Failed to stage files for domain %s", domain)
             return
 
         diff = git_utils.get_staged_diff(self.project_path)
@@ -259,7 +295,7 @@ class ProjectWatcher:
             logger.error("AI message generation error: %s", exc)
 
         if not message:
-            file_names = [f.name for f in files]
+            file_names = [f.name for f in rel_paths]
             message = f"update({suggested_scope}): {', '.join(file_names[:3])}"
             if len(file_names) > 3:
                 message += f" and {len(file_names)-3} more"
@@ -269,7 +305,7 @@ class ProjectWatcher:
 
         commit_hash = self.executor.commit(self.project_path, message)
         if not commit_hash:
-            logger.error("Commit failed for domain %s in project %d", domain, self.project_id)
+            logger.error("Commit failed for domain %s", domain)
             return
 
         logger.info("Committed [%s] %s: %s", domain, commit_hash[:8], message)
@@ -297,12 +333,16 @@ class ProjectWatcher:
         except Exception as exc:
             logger.exception("Failed to log commit to DB: %s", exc)
 
-        self._learn_file_associations(files)
+        # Learn file associations
+        self._learn_file_associations(rel_paths)
+
+        # Learn behavior patterns
         self._learn_behavior_patterns(message, branch or "main", domain)
 
+        # Push
         push_success, push_error = asyncio.run(self.executor.push_with_retry(self.project_path))
         if not push_success:
-            logger.error("Push failed for project %d: %s", self.project_id, push_error)
+            logger.error("Push failed: %s", push_error)
             if self.on_push_failed:
                 self.on_push_failed(self.project_id, push_error)
         else:
@@ -315,6 +355,7 @@ class ProjectWatcher:
                     timestamp=datetime.now(timezone.utc).isoformat(),
                 )
 
+        # Discord notification
         if self.discord_webhook_enabled:
             try:
                 with managed_connection() as conn:
@@ -342,6 +383,9 @@ class ProjectWatcher:
                 last_event=datetime.now(timezone.utc).isoformat(),
             )
 
+    # ------------------------------------------------------------------
+    # Learning helpers
+    # ------------------------------------------------------------------
     def _learn_file_associations(self, files: List[Path]) -> None:
         try:
             with managed_connection() as conn:
