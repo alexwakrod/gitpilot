@@ -1,5 +1,5 @@
 """CLI interface for GitPilot – fully interactive TUI with intelligent project setup,
-   API key validation, cross‑platform service, Groq & Qwen support, and all intelligence commands."""
+   API key validation, cross‑platform service, Qwen support, and all intelligence commands."""
 
 import asyncio
 import json
@@ -31,15 +31,12 @@ from gitpilot.domain.policies import get_token_path, get_current_os_user, genera
 from gitpilot.domain.settings import SettingsManager, get_gitpilot_dir
 from gitpilot.core.project_setup import (
     is_git_repo,
-    has_remote_origin,
-    has_commits,
     ensure_initial_commit,
     create_github_repo,
-    setup_project,
 )
 from gitpilot.core.executor import GitExecutor
 from gitpilot.core.intelligence import DomainClassifier, CommitSplitter, OptimizationScanner
-from gitpilot.core import git_utils
+from gitpilot.core import git_utils  # native Git porcelain
 from gitpilot.infrastructure.db import managed_connection, get_db_path
 from gitpilot.infrastructure.repositories.commits import CommitsRepository
 from gitpilot.infrastructure.repositories.patterns import PatternsRepository
@@ -209,7 +206,6 @@ def _validate_api_key_format(key: str, provider: str) -> bool:
         return False
     if provider == "anthropic" and not key.startswith("sk-ant-"):
         return False
-    # Qwen uses sk-ws- prefix (Alibaba DashScope)
     if provider == "qwen" and not key.startswith("sk-ws-"):
         return False
     return True
@@ -405,6 +401,81 @@ def _spawn_in_new_terminal() -> None:
 
 
 # ============================================================================
+# Comprehensive Git readiness check (interactive)
+# ============================================================================
+def _prepare_project_directory(path: Path, settings_mgr: SettingsManager) -> bool:
+    """
+    Check that the given path is a valid, ready Git repository.
+    If not, interactively guide the user to fix missing pieces
+    (git init, initial commit, remote setup, .gitignore, etc.).
+
+    Returns True if ready (or user fixed everything), False if user cancels.
+    """
+    if not path.exists() or not path.is_dir():
+        console.print("[red]The selected directory does not exist or is not a directory.[/red]")
+        return False
+
+    # 1. Git repository?
+    if not is_git_repo(path):
+        console.print("[yellow]This directory is not a Git repository.[/yellow]")
+        if not Confirm.ask("Would you like to initialize a Git repository here?", default=True):
+            return False
+        executor = GitExecutor()
+        if not executor.init_repo(path):
+            console.print("[red]Failed to initialize Git repository.[/red]")
+            return False
+        console.print("[green]Git repository initialized.[/green]")
+    else:
+        console.print("[green]✓ Git repository found.[/green]")
+
+    # 2. At least one commit?
+    if not git_utils.has_commits(path):
+        console.print("[yellow]No commits found in this repository.[/yellow]")
+        if Confirm.ask("Create an initial commit?", default=True):
+            if not ensure_initial_commit(path):
+                console.print("[red]Could not create initial commit. Proceeding anyway, but commits may fail.[/red]")
+            else:
+                console.print("[green]Initial commit created.[/green]")
+        # Allow user to skip, but warn
+    else:
+        console.print("[green]✓ Repository has commits.[/green]")
+
+    # 3. .gitignore existence (optional but recommended)
+    if not (path / ".gitignore").exists():
+        console.print("[dim]No .gitignore file found. Consider adding one to avoid committing artifacts.[/dim]")
+
+    # 4. Remote origin?
+    if not git_utils.has_remote_origin(path):
+        console.print("[yellow]No remote 'origin' configured.[/yellow]")
+        config = settings_mgr.load()
+        if config.get("github_token"):
+            if Confirm.ask("Would you like to create a GitHub repository and set it as origin?", default=False):
+                repo_name = Prompt.ask("Repository name", default=path.name)
+                private = Confirm.ask("Private repository?", default=True)
+                clone_url = create_github_repo(
+                    name=repo_name,
+                    private=private,
+                    github_token=config["github_token"],
+                )
+                if clone_url:
+                    executor = GitExecutor()
+                    if executor.set_remote_origin(path, clone_url):
+                        console.print("[green]Remote origin added successfully.[/green]")
+                    else:
+                        console.print("[red]Failed to set remote origin. You can add it later manually.[/red]")
+                else:
+                    console.print("[yellow]Could not create GitHub repository. Proceeding locally.[/yellow]")
+            else:
+                console.print("[dim]Skipping remote setup. You can add one later with `git remote add origin <url>`.[/dim]")
+        else:
+            console.print("[dim]No GitHub token configured. Run `gitpilot setup` to add one for automatic remote creation.[/dim]")
+    else:
+        console.print("[green]✓ Remote 'origin' is configured.[/green]")
+
+    return True
+
+
+# ============================================================================
 # Main TUI
 # ============================================================================
 class MainMenu:
@@ -483,43 +554,12 @@ class MainMenu:
         console.clear()
         console.print(f"Selected: [bold]{path}[/bold]")
 
-        if not is_git_repo(path):
-            console.print("[yellow]Directory is not a Git repository. Initializing...[/yellow]")
-            executor = GitExecutor()
-            if not executor.init_repo(path):
-                console.print("[red]Failed to initialize Git repository.[/red]")
-                return
-            console.print("[green]Git repository initialized.[/green]")
-
-        if not git_utils.has_commits(path):
-            console.print("[yellow]No commits found. Creating initial commit...[/yellow]")
-            if not ensure_initial_commit(path):
-                console.print("[red]Failed to create initial commit.[/red]")
-                return
-            console.print("[green]Initial commit created.[/green]")
-
-        if not git_utils.has_remote_origin(path):
-            config = self.settings_mgr.load()
-            if config.get("github_token"):
-                create_remote = Confirm.ask("No remote 'origin' found. Create a GitHub repository?", default=False)
-                if create_remote:
-                    repo_name = Prompt.ask("Repository name", default=path.name)
-                    private = Confirm.ask("Private repository?", default=True)
-                    clone_url = create_github_repo(
-                        name=repo_name,
-                        private=private,
-                        github_token=config["github_token"],
-                    )
-                    if clone_url:
-                        executor = GitExecutor()
-                        if executor.set_remote_origin(path, clone_url):
-                            console.print("[green]Remote origin added.[/green]")
-                        else:
-                            console.print("[red]Failed to set remote origin.[/red]")
-                    else:
-                        console.print("[yellow]Could not create GitHub repository. Proceeding locally.[/yellow]")
-            else:
-                console.print("[dim]No GitHub token configured – skipping remote setup.[/dim]")
+        # Run comprehensive Git readiness check
+        if not _prepare_project_directory(path, self.settings_mgr):
+            console.print("[red]Project setup cancelled.[/red]")
+            console.print("\nPress any key to continue...", end="")
+            readchar.readkey()
+            return
 
         name = Prompt.ask("Project name (default: directory name)", default=path.name)
         payload = {"name": name, "path": str(path)}
@@ -532,6 +572,7 @@ class MainMenu:
         readchar.readkey()
 
     def _monitor(self):
+        # unchanged
         console.clear()
         try:
             resp = self.client.get("/api/v1/projects")
@@ -1031,10 +1072,16 @@ def daemon_status() -> None:
 @click.option("--github-repo", help="Create a private GitHub repository with this name")
 def add(path: str, name: Optional[str], github_repo: Optional[str]) -> None:
     """Register a project directory for auto‑commit watching."""
+    dir_path = Path(path)
+    # Run readiness check locally before calling the daemon
+    settings_mgr = SettingsManager()
+    if not _prepare_project_directory(dir_path, settings_mgr):
+        console.print("[red]Project setup cancelled due to readiness issues.[/red]")
+        return
+
     client = _get_client()
     if client is None:
         return
-    dir_path = Path(path)
     project_name = name or dir_path.name
     payload = {"name": project_name, "path": str(dir_path)}
     if github_repo:
