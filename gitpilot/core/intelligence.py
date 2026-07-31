@@ -420,19 +420,15 @@ class CommitSplitter:
 
         # Layer 3 – Domain splitting (only when AI grouping is disabled)
         # But even here, we start with atomic groups and then domain‑classify within each atom
+        groups = self.split(files, project_root, project_id)
         plan = []
-        for atom in atomic_groups:
-            if len(atom) == 1:
-                # Single file – just use its domain for scope
-                domain = self.classifier.classify(atom[0], project_root)
-                scope = domain if domain != "other" else "misc"
-                plan.append({"files": atom, "domain": domain, "suggested_scope": scope})
-            else:
-                # Multiple files in the same atomic group – keep them together
-                # Determine the dominant domain for the group
-                domains = [self.classifier.classify(f, project_root) for f in atom]
-                dominant = max(set(domains), key=domains.count) if domains else "mixed"
-                plan.append({"files": atom, "domain": dominant, "suggested_scope": dominant})
+        for domain, domain_files in groups.items():
+            scope = domain if domain != "general" else "misc"
+            plan.append({
+                "domain": domain,
+                "files": domain_files,
+                "suggested_scope": scope,
+            })
         return plan
 
 
