@@ -1,27 +1,35 @@
-"""Additional extensive unit tests to push coverage above 85%."""
+"""Additional extensive unit tests to push coverage above 85% (corrected)."""
 
 import asyncio
 import subprocess
+import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from gitpilot.core.committer import AICommitter, build_commit_prompt, clean_commit_message
+from gitpilot.core.committer import AICommitter
 from gitpilot.core.executor import GitExecutor
 from gitpilot.core.intelligence import DomainClassifier, CommitSplitter, OptimizationScanner
 from gitpilot.core.project_setup import is_git_repo, ensure_initial_commit, create_github_repo, setup_project
 from gitpilot.core.watcher import ChangeAccumulator, FileHashCache
-from gitpilot.cli.main import _test_grok_api_key, _test_groq_api_key, _test_qwen_api_key, _test_openai_api_key, _test_anthropic_api_key, _test_ollama_connection
+from gitpilot.cli.main import (
+    _test_grok_api_key, _test_groq_api_key, _test_qwen_api_key,
+    _test_openai_api_key, _test_anthropic_api_key, _test_ollama_connection,
+)
+
+
+def _configure_git(repo: Path) -> None:
+    """Set git user config inside the given repository."""
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
 
 
 # ===========================================================================
-# Committer – full coverage of error branches
+# Committer – error branches
 # ===========================================================================
 class TestAICommitterErrorBranches:
-    """Cover missing lines in committer: missing API key, unknown provider, generate_message exception."""
-
     @pytest.mark.asyncio
     async def test_call_grok_no_key(self):
         c = AICommitter(provider="grok", grok_api_key=None)
@@ -61,7 +69,6 @@ class TestAICommitterErrorBranches:
     @pytest.mark.asyncio
     async def test_generate_message_catches_exception_from_call_grok(self, monkeypatch):
         c = AICommitter(provider="grok", grok_api_key="xai-test")
-        # Patch _call_grok to raise an exception
         monkeypatch.setattr(c, "_call_grok", AsyncMock(side_effect=httpx.ConnectError("timeout")))
         msg = await c.generate_message("diff")
         assert msg is None
@@ -114,13 +121,11 @@ class TestGitExecutorEdgeCases:
         assert executor.stage_files(Path("/tmp"), []) is True
 
     def test_commit_failure_subprocess(self, executor, monkeypatch):
-        # Simulate git commit failure
         mock = MagicMock()
         mock.returncode = 1
         mock.stdout = ""
         mock.stderr = "error"
         monkeypatch.setattr("gitpilot.core.executor.git_utils.run_git", lambda *a, **kw: mock)
-        # ensure GITPYTHON_AVAILABLE is False to hit subprocess path
         monkeypatch.setattr("gitpilot.core.executor.GITPYTHON_AVAILABLE", False)
         commit_hash = executor.commit(Path("/tmp"), "test")
         assert commit_hash is None
@@ -133,7 +138,6 @@ class TestGitExecutorEdgeCases:
 
     @pytest.mark.asyncio
     async def test_push_with_retry_success(self, executor, monkeypatch):
-        # Mock _try_push to return success on second attempt
         executor._try_push = AsyncMock(side_effect=[(False, "err1"), (True, None)])
         success, err = await executor.push_with_retry(Path("/tmp"))
         assert success is True
@@ -155,12 +159,11 @@ class TestGitExecutorEdgeCases:
 
     def test_embed_token_in_url_failure_get_url(self, executor, monkeypatch):
         mock = MagicMock()
-        mock.returncode = 1  # remote get-url fails
+        mock.returncode = 1
         monkeypatch.setattr("subprocess.run", lambda *a, **kw: mock)
         assert executor._embed_token_in_url(Path("/tmp"), "token") is False
 
     def test_get_current_branch_gitpython_fallback(self, executor, monkeypatch):
-        # Force GITPYTHON_AVAILABLE False, subprocess returns branch
         monkeypatch.setattr("gitpilot.core.executor.GITPYTHON_AVAILABLE", False)
         with patch("subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
@@ -224,7 +227,7 @@ class TestCommitSplitterPlan:
 
 
 # ===========================================================================
-# Project setup – full coverage
+# Project setup – full coverage (fixed Git config)
 # ===========================================================================
 class TestProjectSetup:
     def test_is_git_repo_true(self, tmp_path):
@@ -240,9 +243,8 @@ class TestProjectSetup:
         repo = tmp_path / "repo"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, capture_output=True)
-        # No files, should create empty commit
+        _configure_git(repo)
         assert ensure_initial_commit(repo) is True
-        # Verify commit exists
         result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True)
         assert result.returncode == 0
 
@@ -250,6 +252,7 @@ class TestProjectSetup:
         repo = tmp_path / "repo"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+        _configure_git(repo)
         (repo / "file.txt").write_text("hi")
         assert ensure_initial_commit(repo) is True
 
@@ -266,13 +269,14 @@ class TestProjectSetup:
         mock_resp.status_code = 422
         mock_resp.text = "error"
         with patch("httpx.post", return_value=mock_resp):
-            url = create_github_repo("test-repo", token="fake")
+            url = create_github_repo("test-repo", github_token="fake")
             assert url is None
 
     def test_setup_project_existing(self, tmp_path):
         repo = tmp_path / "repo"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, capture_output=True)
+        _configure_git(repo)
         subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=repo, capture_output=True)
         ok, err = setup_project(repo)
         assert ok is True
@@ -285,7 +289,7 @@ class TestProjectSetup:
 
 
 # ===========================================================================
-# Watcher components (ChangeAccumulator, FileHashCache)
+# Watcher components
 # ===========================================================================
 class TestWatcherComponents:
     def test_change_accumulator_add_reset(self):
@@ -297,15 +301,17 @@ class TestWatcherComponents:
         assert len(changes) == 2
         assert acc.size == 0
 
-    def test_file_hash_cache_ttl(self):
+    def test_file_hash_cache_ttl(self, monkeypatch):
+        import time as time_module
         cache = FileHashCache(ttl=1)
         cache.set_hash("a", "hash")
-        assert cache.get_hash("a") == "hash"
-        # Simulate TTL expiry by directly manipulating the stored timestamp
-        # We'll just test the expiry by patching time.time
-        import time
-        with patch("time.time", return_value=time.time() + 2):
-            assert cache.get_hash("a") is None
+        # Simulate TTL expiry by patching time.time to return a future value
+        fake_now = time.time()
+        monkeypatch.setattr(time_module, "time", lambda: fake_now)
+        cache.set_hash("a", "hash")
+        # Now advance time beyond TTL
+        monkeypatch.setattr(time_module, "time", lambda: fake_now + 2)
+        assert cache.get_hash("a") is None
 
     def test_file_hash_cache_invalidate(self):
         cache = FileHashCache()
@@ -315,7 +321,7 @@ class TestWatcherComponents:
 
 
 # ===========================================================================
-# API key live test functions (coverage for async testers)
+# API key live test functions
 # ===========================================================================
 class TestAPILiveTesters:
     @pytest.mark.asyncio
