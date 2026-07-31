@@ -1,6 +1,7 @@
 """File watching service with debounce, AI‑powered grouping, domain isolation,
    optimization hints, file association learning, behavior pattern tracking,
-   and automatic ignore of common build/virtual‑env artifacts."""
+   and automatic ignore of common build/virtual‑env artifacts.
+   Uses pre‑computed commit description from intelligence layer."""
 
 import asyncio
 import hashlib
@@ -33,7 +34,6 @@ from gitpilot.domain.policies import get_current_os_user
 
 logger = logging.getLogger("gitpilot.watcher")
 
-# Always‑ignored path patterns (relative or absolute fragments)
 ALWAYS_IGNORE = {
     ".venv", "venv", ".env", "__pycache__", "*.pyc", "*.pyo",
     "dist", "build", "*.egg-info", "*.egg", "node_modules",
@@ -88,17 +88,14 @@ class ChangeAccumulator:
 
 
 def _is_always_ignored(path: Path) -> bool:
-    """Return True if the path matches any always‑ignored pattern."""
     path_str = str(path).replace("\\", "/")
     parts = path_str.split("/")
     for part in parts:
         if part in ALWAYS_IGNORE:
             return True
-    # Check full path against wildcard patterns
     for pattern in ALWAYS_IGNORE:
         if pattern.startswith("*."):
-            ext = pattern[1:]
-            if path_str.endswith(ext):
+            if path_str.endswith(pattern[1:]):
                 return True
         elif f"/{pattern}/" in f"/{path_str}/" or path_str.startswith(pattern + "/"):
             return True
@@ -254,6 +251,7 @@ class ProjectWatcher:
                     rel_paths=[self.project_path / p for p in plan_item["files"]],
                     domain=plan_item.get("domain", "general"),
                     suggested_scope=plan_item.get("suggested_scope", "misc"),
+                    ai_description=plan_item.get("description"),   # <-- from intelligence
                 )
             except Exception as exc:
                 logger.exception(
@@ -266,7 +264,10 @@ class ProjectWatcher:
         rel_paths: List[Path],
         domain: str,
         suggested_scope: str,
+        ai_description: Optional[str] = None,
     ) -> None:
+        """Stage, message, commit, and push for one group of files.
+           If an AI description is provided, it is used directly as the commit message."""
         if not git_utils.reset_index(self.project_path):
             return
         if not git_utils.stage_specific_files(self.project_path, rel_paths):
@@ -284,27 +285,33 @@ class ProjectWatcher:
         if self.enable_optimizations:
             optimization_notes = OptimizationScanner.scan_diff(diff)
 
-        message = None
-        try:
-            context_diff = diff
+        # Use the AI description if available, otherwise generate
+        if ai_description:
+            message = ai_description
             if optimization_notes:
-                context_diff += "\n\nOptimization notes:\n" + "\n".join(optimization_notes)
-            message = asyncio.run(self.committer.generate_message(
-                diff=context_diff,
-                branch=branch,
-                scope_hint=suggested_scope,
-            ))
-        except Exception as exc:
-            logger.error("AI message generation error: %s", exc)
+                message += "\n\nOptimization notes:\n" + "\n".join(f"- {n}" for n in optimization_notes)
+        else:
+            message = None
+            try:
+                context_diff = diff
+                if optimization_notes:
+                    context_diff += "\n\nOptimization notes:\n" + "\n".join(optimization_notes)
+                message = asyncio.run(self.committer.generate_message(
+                    diff=context_diff,
+                    branch=branch,
+                    scope_hint=suggested_scope,
+                ))
+            except Exception as exc:
+                logger.error("AI message generation error: %s", exc)
 
-        if not message:
-            file_names = [f.name for f in rel_paths]
-            message = f"update({suggested_scope}): {', '.join(file_names[:3])}"
-            if len(file_names) > 3:
-                message += f" and {len(file_names)-3} more"
+            if not message:
+                file_names = [f.name for f in rel_paths]
+                message = f"update({suggested_scope}): {', '.join(file_names[:3])}"
+                if len(file_names) > 3:
+                    message += f" and {len(file_names)-3} more"
 
-        if optimization_notes:
-            message += "\n\nOptimization notes:\n" + "\n".join(f"- {n}" for n in optimization_notes)
+            if optimization_notes and ai_description is None:
+                message += "\n\nOptimization notes:\n" + "\n".join(f"- {n}" for n in optimization_notes)
 
         commit_hash = self.executor.commit(self.project_path, message)
         if not commit_hash:
@@ -426,8 +433,6 @@ class ProjectWatcher:
 
 
 class WatcherService:
-    """Manages multiple ProjectWatcher instances and the watchdog Observer."""
-
     def __init__(
         self,
         executor: GitExecutor,
@@ -461,7 +466,6 @@ class WatcherService:
         if project_path in self._watched_paths:
             logger.warning("Already watching %s", project_path)
             return
-
         if not project_path.exists() or not project_path.is_dir():
             logger.error("Cannot watch non-existent directory: %s", project_path)
             return
@@ -485,16 +489,12 @@ class WatcherService:
         class Handler(FileSystemEventHandler):
             def __init__(self, pw: ProjectWatcher):
                 self.pw = pw
-
             def on_created(self, event):
                 self.pw.handle_change(event)
-
             def on_modified(self, event):
                 self.pw.handle_change(event)
-
             def on_deleted(self, event):
                 self.pw.handle_change(event)
-
             def on_moved(self, event):
                 self.pw.handle_change(event)
 
