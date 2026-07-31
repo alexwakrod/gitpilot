@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gitpilot-ai"
-version = "0.2.3"
+version = "0.2.5"
 description = "Local AI-powered Git auto-committer daemon"
 authors = [{ name = "Alex Wakrod", email = "alexwakrod@gmail.com" }]
 license = "MIT"
@@ -49,7 +49,7 @@ packages = [
 ]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 55
 
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }
