@@ -374,11 +374,15 @@ class CommitSplitter:
         project_root: Optional[Path] = None,
         project_id: Optional[int] = None,
     ) -> Dict[str, List[Path]]:
-        """Return a {domain: [files]} dict for backward compatibility.
-           If AI grouping is enabled, all files go into 'mixed'."""
+        # When splitting is disabled, everything goes into one “general” group
+        if not self.enable_splitting:
+            return {"general": files}
+
+        # When AI grouping is active, the “mixed” group preserves all files together
         if self.ai_grouper:
             return {"mixed": files}
-        # Manual domain splitting
+
+        # Classic domain‑based split (AI grouping off)
         groups: Dict[str, List[Path]] = {}
         for f in files:
             domain = self.classifier.classify(f, project_root)
