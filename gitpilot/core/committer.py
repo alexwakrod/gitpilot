@@ -52,7 +52,7 @@ def clean_commit_message(raw: str) -> str:
     cleaned = re.sub(r"^[-*]\s+", "", cleaned.strip())
     cleaned = re.sub(r"^(here is the commit message:?\s*)", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^(the commit message is:?\s*)", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = re.sub(r"\n{2,}", "\n", cleaned)
     if cleaned.startswith("(") and cleaned.endswith(")"):
         cleaned = cleaned[1:-1].strip()
     return cleaned.strip()
