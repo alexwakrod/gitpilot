@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/alexwakrod/gitpilot/main/assets/gitpilot-logo.svg" alt="GitPilot logo" width="160" />
+  <img src="assets/gitpilot-logo.svg" alt="GitPilot logo" width="160" />
 
   # GitPilot
 
@@ -30,14 +30,15 @@
 GitPilot watches your Git repositories and turns every save into a meaningful, [Conventional Commit](https://www.conventionalcommits.org/) — automatically. It runs as a quiet background daemon, works with cloud or fully local AI, and **never sends your code off-machine unless you tell it to**.
 
 ```diff
-- git commit -m "fix stuff"          # manual, vague, easy to forget
+- git commit -m "fix stuff"              # manual, vague, easy to forget
 + feat(login): add password reset flow   # written for you, every time
 ```
 
 <div align="center">
+  <!-- Uncomment once assets/demo.gif is recorded (vhs or asciinema recommended)
   <img src="assets/demo.gif" alt="GitPilot live monitor demo" width="760" />
-  <br/>
-  <sub>Live demo coming soon</sub>
+  -->
+  <sub>🎬 Live demo coming soon</sub>
 </div>
 
 ---
@@ -225,6 +226,15 @@ gitpilot/
 | File watching | [watchdog](https://python-watchdog.readthedocs.io/) | Battle-tested, cross-platform |
 | AI integration | Strategy-pattern adapter | Swap providers without touching core logic |
 
+**Built with**
+
+<p>
+  <img src="https://img.shields.io/badge/Python_3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
+  <img src="https://img.shields.io/badge/Ollama-000000?style=flat-square&logo=ollama&logoColor=white" alt="Ollama" />
+</p>
+
 ---
 
 ## Configuration
@@ -300,8 +310,11 @@ python -m build
 
 ## Community
 
-Join our Discord server for support, feature requests, and real‑time discussion:  
-[![Discord](https://img.shields.io/badge/Discord-GitPilot-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/4NGs3wrkMQ)
+Questions, ideas, or feature requests? Join the conversation:
+
+<p>
+  <a href="https://discord.gg/4NGs3wrkMQ"><img src="https://img.shields.io/badge/Discord-Join_the_community-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Join the GitPilot Discord" /></a>
+</p>
 
 ---
 
