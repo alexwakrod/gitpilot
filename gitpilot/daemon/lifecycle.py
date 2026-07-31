@@ -34,6 +34,7 @@ class DaemonLifecycle:
         self.enable_splitting = bool(config.get("enable_splitting", True))
         self.enable_ai_grouping = bool(config.get("enable_ai_grouping", True))
         self.enable_optimizations = bool(config.get("enable_optimizations", False))
+        self.enable_precommit_checks = bool(config.get("enable_precommit_checks", True))
         self.on_commit_completed = None
         self.on_push_failed = None
         self.on_watcher_status = None
@@ -67,6 +68,7 @@ class DaemonLifecycle:
             enable_splitting=self.enable_splitting,
             enable_ai_grouping=self.enable_ai_grouping,
             enable_optimizations=self.enable_optimizations,
+            enable_precommit_checks=self.enable_precommit_checks,
             discord_webhook_enabled=bool(self.config.get("discord_webhook_enabled", False)),
             on_commit_completed=self.on_commit_completed,
             on_push_failed=self.on_push_failed,
@@ -176,13 +178,14 @@ class DaemonLifecycle:
         self.enable_splitting = bool(new_config.get("enable_splitting", self.enable_splitting))
         self.enable_ai_grouping = bool(new_config.get("enable_ai_grouping", self.enable_ai_grouping))
         self.enable_optimizations = bool(new_config.get("enable_optimizations", self.enable_optimizations))
+        self.enable_precommit_checks = bool(new_config.get("enable_precommit_checks", self.enable_precommit_checks))
 
         if self.watcher:
             for pw in self.watcher._watchers.values():
                 pw.enable_splitting = self.enable_splitting
                 pw.enable_ai_grouping = self.enable_ai_grouping
                 pw.enable_optimizations = self.enable_optimizations
+                pw.enable_precommit_checks = self.enable_precommit_checks
                 pw.commit_splitter.enable_splitting = pw.enable_splitting
-                # The AI grouper uses self.committer which is already updated
 
         logger.info("Configuration reloaded successfully")

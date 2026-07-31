@@ -1,7 +1,6 @@
 """File watching service with debounce, AI‑powered grouping, domain isolation,
    optimization hints, file association learning, behavior pattern tracking,
-   and automatic ignore of common build/virtual‑env artifacts.
-   Uses pre‑computed commit description from intelligence layer."""
+   automatic ignore of common artifacts, and pre‑commit intelligence checks."""
 
 import asyncio
 import hashlib
@@ -25,14 +24,18 @@ from gitpilot.core.intelligence import (
     CommitSplitter,
     OptimizationScanner,
 )
+from gitpilot.core.precommit import run_all_checks, PRE_COMMIT_CHECKS
 from gitpilot.infrastructure.db import managed_connection
 from gitpilot.infrastructure.repositories.commits import CommitsRepository
 from gitpilot.infrastructure.repositories.discord_webhooks import DiscordWebhooksRepository
 from gitpilot.infrastructure.repositories.file_associations import FileAssociationsRepository
 from gitpilot.infrastructure.repositories.patterns import PatternsRepository
 from gitpilot.domain.policies import get_current_os_user
+from rich.console import Console
+from rich.prompt import Prompt
 
 logger = logging.getLogger("gitpilot.watcher")
+console = Console()
 
 ALWAYS_IGNORE = {
     ".venv", "venv", ".env", "__pycache__", "*.pyc", "*.pyo",
@@ -104,7 +107,8 @@ def _is_always_ignored(path: Path) -> bool:
 
 class ProjectWatcher:
     """Watches a single project directory, uses AI to group related changes,
-       commits each group separately, learns associations and patterns."""
+       commits each group separately, learns associations and patterns,
+       and runs pre‑commit intelligence checks."""
 
     def __init__(
         self,
@@ -116,6 +120,7 @@ class ProjectWatcher:
         enable_splitting: bool = True,
         enable_ai_grouping: bool = True,
         enable_optimizations: bool = False,
+        enable_precommit_checks: bool = True,
         branch_aware: bool = True,
         discord_webhook_enabled: bool = False,
         on_commit_completed: Optional[Callable] = None,
@@ -130,6 +135,7 @@ class ProjectWatcher:
         self.enable_splitting = enable_splitting
         self.enable_ai_grouping = enable_ai_grouping
         self.enable_optimizations = enable_optimizations
+        self.enable_precommit_checks = enable_precommit_checks
         self.branch_aware = branch_aware
         self.discord_webhook_enabled = discord_webhook_enabled
         self.on_commit_completed = on_commit_completed
@@ -251,7 +257,7 @@ class ProjectWatcher:
                     rel_paths=[self.project_path / p for p in plan_item["files"]],
                     domain=plan_item.get("domain", "general"),
                     suggested_scope=plan_item.get("suggested_scope", "misc"),
-                    ai_description=plan_item.get("description"),   # <-- from intelligence
+                    ai_description=plan_item.get("description"),
                 )
             except Exception as exc:
                 logger.exception(
@@ -266,8 +272,7 @@ class ProjectWatcher:
         suggested_scope: str,
         ai_description: Optional[str] = None,
     ) -> None:
-        """Stage, message, commit, and push for one group of files.
-           If an AI description is provided, it is used directly as the commit message."""
+        """Stage, run pre‑commit checks, generate message, commit, and push."""
         if not git_utils.reset_index(self.project_path):
             return
         if not git_utils.stage_specific_files(self.project_path, rel_paths):
@@ -281,13 +286,29 @@ class ProjectWatcher:
         if self.branch_aware:
             branch = git_utils.get_current_branch(self.project_path)
 
+        # ---------------------------------------------------------------
+        # Pre‑commit intelligence checks
+        # ---------------------------------------------------------------
+        precommit_warnings = []
+        if self.enable_precommit_checks:
+            precommit_warnings = run_all_checks(
+                self.project_path,
+                [self.project_path / p for p in rel_paths],
+                diff,
+                enabled=["lint", "test", "conflict", "dependency", "code_smell", "security", "rollback", "gitignore"],
+            )
+
         optimization_notes = []
         if self.enable_optimizations:
             optimization_notes = OptimizationScanner.scan_diff(diff)
 
-        # Use the AI description if available, otherwise generate
+        # ---------------------------------------------------------------
+        # Determine commit message
+        # ---------------------------------------------------------------
         if ai_description:
             message = ai_description
+            if precommit_warnings:
+                message += "\n\n⚠ Pre‑commit warnings:\n" + "\n".join(f"- {w}" for w in precommit_warnings)
             if optimization_notes:
                 message += "\n\nOptimization notes:\n" + "\n".join(f"- {n}" for n in optimization_notes)
         else:
@@ -310,8 +331,26 @@ class ProjectWatcher:
                 if len(file_names) > 3:
                     message += f" and {len(file_names)-3} more"
 
-            if optimization_notes and ai_description is None:
+            if precommit_warnings:
+                message += "\n\n⚠ Pre‑commit warnings:\n" + "\n".join(f"- {w}" for w in precommit_warnings)
+            if optimization_notes:
                 message += "\n\nOptimization notes:\n" + "\n".join(f"- {n}" for n in optimization_notes)
+
+        # ---------------------------------------------------------------
+        # Interactive refinement (optional – when running in TTY mode)
+        # ---------------------------------------------------------------
+        if sys.stdin.isatty():
+            try:
+                console.print(f"\n[bold cyan]Proposed commit message:[/bold cyan]\n{message}")
+                if precommit_warnings:
+                    console.print("[yellow]Pre‑commit warnings:[/yellow]")
+                    for w in precommit_warnings:
+                        console.print(f"  • {w}")
+                refined = Prompt.ask("Press Enter to accept, or type a new message", default=message)
+                if refined:
+                    message = refined.strip()
+            except Exception:
+                pass
 
         commit_hash = self.executor.commit(self.project_path, message)
         if not commit_hash:
@@ -441,6 +480,7 @@ class WatcherService:
         enable_splitting: bool = True,
         enable_ai_grouping: bool = True,
         enable_optimizations: bool = False,
+        enable_precommit_checks: bool = True,
         discord_webhook_enabled: bool = False,
         on_commit_completed: Optional[Callable] = None,
         on_push_failed: Optional[Callable] = None,
@@ -452,6 +492,7 @@ class WatcherService:
         self.enable_splitting = enable_splitting
         self.enable_ai_grouping = enable_ai_grouping
         self.enable_optimizations = enable_optimizations
+        self.enable_precommit_checks = enable_precommit_checks
         self.discord_webhook_enabled = discord_webhook_enabled
         self.on_commit_completed = on_commit_completed
         self.on_push_failed = on_push_failed
@@ -479,6 +520,7 @@ class WatcherService:
             enable_splitting=self.enable_splitting,
             enable_ai_grouping=self.enable_ai_grouping,
             enable_optimizations=self.enable_optimizations,
+            enable_precommit_checks=self.enable_precommit_checks,
             branch_aware=True,
             discord_webhook_enabled=self.discord_webhook_enabled,
             on_commit_completed=self.on_commit_completed,
