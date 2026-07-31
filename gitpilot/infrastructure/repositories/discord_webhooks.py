@@ -82,4 +82,8 @@ class DiscordWebhooksRepository:
         return cursor.rowcount > 0
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
-        return dict(row)
+        data = dict(row)
+        # SQLite stores booleans as 0/1 – convert to Python bool
+        if "enabled" in data and isinstance(data["enabled"], int):
+            data["enabled"] = bool(data["enabled"])
+        return data
