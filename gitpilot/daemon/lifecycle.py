@@ -42,7 +42,7 @@ class DaemonLifecycle:
             anthropic_api_key=config.get("anthropic_api_key"),
             ollama_base_url=config.get("ollama_base_url", "http://localhost:11434"),
             ollama_model=config.get("ollama_model", "llama3"),
-            groq_model=config.get("groq_model", "llama3-70b-8192"),
+            groq_model=config.get("groq_model", "llama-3.3-70b-versatile"),
             qwen_model=config.get("qwen_model", "qwen-plus"),
         )
         self._watcher_thread: Optional[threading.Thread] = None
