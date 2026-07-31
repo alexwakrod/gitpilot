@@ -1,6 +1,6 @@
 """CLI interface for GitPilot – fully interactive TUI with intelligent project setup,
    API key validation, cross‑platform service, Qwen support, masked secrets,
-   and all intelligence commands."""
+   AI‑powered commit grouping toggle, and all intelligence commands."""
 
 import asyncio
 import json
@@ -95,7 +95,7 @@ def _get_client() -> Optional[httpx.Client]:
 
 
 # ============================================================================
-# API key validation (live test with detailed feedback)
+# API key validation (unchanged from previous full version)
 # ============================================================================
 async def _test_grok_api_key(key: str, model: str) -> bool:
     try:
@@ -231,7 +231,6 @@ def _prompt_api_key_with_test(provider: str, default_key: str, model: str) -> st
             console.print(f"Current key: [dim]{_mask_secret(default_key)}[/dim]")
         key = Prompt.ask(f"{provider.capitalize()} API Key", password=True, default="")
         if not key and default_key:
-            # user entered empty – keep the old key
             return default_key
         if provider == "ollama":
             return key
@@ -263,7 +262,7 @@ def _prompt_api_key_with_test(provider: str, default_key: str, model: str) -> st
 
 
 # ============================================================================
-# Non‑blocking key input reader
+# Non‑blocking key input reader (unchanged)
 # ============================================================================
 class NonBlockingKeyReader:
     def __init__(self):
@@ -378,7 +377,7 @@ class DirectoryPicker:
 
 
 # ============================================================================
-# Native GUI folder picker
+# Native GUI folder picker (unchanged)
 # ============================================================================
 def _pick_directory_gui() -> Optional[Path]:
     try:
@@ -401,7 +400,7 @@ def _pick_directory_gui() -> Optional[Path]:
 
 
 # ============================================================================
-# Auto‑launch in new terminal if not in a TTY
+# Auto‑launch in new terminal if not in a TTY (unchanged)
 # ============================================================================
 def _spawn_in_new_terminal() -> None:
     script = f'"{sys.executable}" -m gitpilot.cli.main'
@@ -579,6 +578,7 @@ class MainMenu:
         readchar.readkey()
 
     def _monitor(self):
+        # unchanged
         console.clear()
         try:
             resp = self.client.get("/api/v1/projects")
@@ -695,7 +695,7 @@ class MainMenu:
             "1": "Change AI Provider / API Key",
             "2": "Change GitHub Token",
             "3": "Configure Discord Webhook for a project",
-            "4": "Toggle branch‑aware messages / smart grouping / domain splitting",
+            "4": "Toggle branch‑aware messages / smart grouping / domain splitting / AI grouping",
             "5": "Back to main menu",
         }
         while True:
@@ -820,6 +820,8 @@ class MainMenu:
         self.settings_mgr.set("branch_aware_messages", branch)
         split = Confirm.ask("Domain‑aware commit splitting?", default=config.get("enable_splitting", True))
         self.settings_mgr.set("enable_splitting", split)
+        ai_group = Confirm.ask("AI‑powered commit grouping?", default=config.get("enable_ai_grouping", True))
+        self.settings_mgr.set("enable_ai_grouping", ai_group)
         optim = Confirm.ask("Enable optimization hints in commit messages?", default=config.get("enable_optimizations", False))
         self.settings_mgr.set("enable_optimizations", optim)
         debounce = Prompt.ask("Debounce interval (seconds)", default=str(config.get("debounce_interval", 120)))
@@ -829,7 +831,7 @@ class MainMenu:
 
 
 # ============================================================================
-# Cross‑platform service installation
+# Cross‑platform service installation (unchanged)
 # ============================================================================
 def _install_linux_service() -> None:
     service_dir = Path.home() / ".config" / "systemd" / "user"
@@ -1033,6 +1035,8 @@ def setup():
     settings_mgr.set("smart_grouping", smart)
     branch_aware = Confirm.ask("Enable branch-aware messages?", default=config.get("branch_aware_messages", True))
     settings_mgr.set("branch_aware_messages", branch_aware)
+    ai_group = Confirm.ask("Enable AI‑powered commit grouping?", default=True)
+    settings_mgr.set("enable_ai_grouping", ai_group)
 
     token_file = get_token_path()
     if not token_file.exists():
@@ -1300,7 +1304,7 @@ def watch() -> None:
 
 
 # ------------------------------------------------------------------
-# Intelligence commands
+# Intelligence commands (unchanged)
 # ------------------------------------------------------------------
 
 @cli.command()
