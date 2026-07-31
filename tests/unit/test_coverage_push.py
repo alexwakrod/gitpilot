@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import httpx
+import os
 from fastapi.testclient import TestClient
 
 from gitpilot.daemon.app import create_app
