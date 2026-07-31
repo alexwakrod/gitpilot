@@ -1,6 +1,6 @@
 """CLI interface for GitPilot – fully interactive TUI with intelligent project setup,
    API key validation, cross‑platform service, Qwen support, masked secrets,
-   AI‑powered commit grouping toggle, and all intelligence commands."""
+   AI‑powered commit grouping toggle, pre‑commit checks, and all intelligence commands."""
 
 import asyncio
 import json
@@ -38,6 +38,7 @@ from gitpilot.core.project_setup import (
 from gitpilot.core.executor import GitExecutor
 from gitpilot.core.intelligence import DomainClassifier, CommitSplitter, OptimizationScanner
 from gitpilot.core import git_utils
+from gitpilot.core.precommit import run_all_checks, install_precommit_hook
 from gitpilot.infrastructure.db import managed_connection, get_db_path
 from gitpilot.infrastructure.repositories.commits import CommitsRepository
 from gitpilot.infrastructure.repositories.patterns import PatternsRepository
@@ -95,7 +96,7 @@ def _get_client() -> Optional[httpx.Client]:
 
 
 # ============================================================================
-# API key validation (unchanged from previous full version)
+# API key validation (live test with detailed feedback)
 # ============================================================================
 async def _test_grok_api_key(key: str, model: str) -> bool:
     try:
@@ -262,7 +263,7 @@ def _prompt_api_key_with_test(provider: str, default_key: str, model: str) -> st
 
 
 # ============================================================================
-# Non‑blocking key input reader (unchanged)
+# Non‑blocking key input reader
 # ============================================================================
 class NonBlockingKeyReader:
     def __init__(self):
@@ -377,7 +378,7 @@ class DirectoryPicker:
 
 
 # ============================================================================
-# Native GUI folder picker (unchanged)
+# Native GUI folder picker
 # ============================================================================
 def _pick_directory_gui() -> Optional[Path]:
     try:
@@ -400,7 +401,7 @@ def _pick_directory_gui() -> Optional[Path]:
 
 
 # ============================================================================
-# Auto‑launch in new terminal if not in a TTY (unchanged)
+# Auto‑launch in new terminal if not in a TTY
 # ============================================================================
 def _spawn_in_new_terminal() -> None:
     script = f'"{sys.executable}" -m gitpilot.cli.main'
@@ -578,7 +579,6 @@ class MainMenu:
         readchar.readkey()
 
     def _monitor(self):
-        # unchanged
         console.clear()
         try:
             resp = self.client.get("/api/v1/projects")
@@ -695,7 +695,7 @@ class MainMenu:
             "1": "Change AI Provider / API Key",
             "2": "Change GitHub Token",
             "3": "Configure Discord Webhook for a project",
-            "4": "Toggle branch‑aware messages / smart grouping / domain splitting / AI grouping",
+            "4": "Toggle branch‑aware messages / smart grouping / domain splitting / AI grouping / pre‑commit",
             "5": "Back to main menu",
         }
         while True:
@@ -822,6 +822,8 @@ class MainMenu:
         self.settings_mgr.set("enable_splitting", split)
         ai_group = Confirm.ask("AI‑powered commit grouping?", default=config.get("enable_ai_grouping", True))
         self.settings_mgr.set("enable_ai_grouping", ai_group)
+        precommit = Confirm.ask("Enable pre‑commit checks (lint, test, security)?", default=config.get("enable_precommit_checks", True))
+        self.settings_mgr.set("enable_precommit_checks", precommit)
         optim = Confirm.ask("Enable optimization hints in commit messages?", default=config.get("enable_optimizations", False))
         self.settings_mgr.set("enable_optimizations", optim)
         debounce = Prompt.ask("Debounce interval (seconds)", default=str(config.get("debounce_interval", 120)))
@@ -1037,6 +1039,8 @@ def setup():
     settings_mgr.set("branch_aware_messages", branch_aware)
     ai_group = Confirm.ask("Enable AI‑powered commit grouping?", default=True)
     settings_mgr.set("enable_ai_grouping", ai_group)
+    precommit = Confirm.ask("Enable pre‑commit checks (lint, test, security)?", default=True)
+    settings_mgr.set("enable_precommit_checks", precommit)
 
     token_file = get_token_path()
     if not token_file.exists():
@@ -1240,7 +1244,6 @@ def config_set(key: str, value: str, value_type: str) -> None:
     )
     if resp.status_code == 200:
         console.print(f"[green]Setting '{key}' updated.[/green]")
-        # Notify daemon to reload config
         try:
             client.post("/api/v1/config/reload")
         except Exception:
@@ -1304,9 +1307,8 @@ def watch() -> None:
 
 
 # ------------------------------------------------------------------
-# Intelligence commands (unchanged)
+# Intelligence commands
 # ------------------------------------------------------------------
-
 @cli.command()
 @click.argument("project_path", type=click.Path(exists=True, file_okay=False, resolve_path=True), default=".")
 def split_status(project_path: str) -> None:
@@ -1451,6 +1453,57 @@ def config_review(action: str) -> None:
     settings_mgr = SettingsManager()
     settings_mgr.set("enable_optimizations", action == "on")
     console.print(f"[green]Code review gating turned {action}.[/green]")
+
+
+# ------------------------------------------------------------------
+# Pre‑commit check commands
+# ------------------------------------------------------------------
+@cli.command()
+@click.argument("project_path", type=click.Path(exists=True, file_okay=False, resolve_path=True), default=".")
+def pre_commit_check(project_path: str) -> None:
+    """Run all pre‑commit checks (lint, test, security, etc.) on current changes."""
+    repo_path = Path(project_path)
+    if not is_git_repo(repo_path):
+        console.print("[red]Not a Git repository.[/red]")
+        return
+
+    changes = git_utils.get_porcelain_status(repo_path)
+    file_paths = [repo_path / c.file_path for c in changes if (repo_path / c.file_path).exists()]
+    if not file_paths:
+        console.print("No changes to check.")
+        return
+
+    diff = git_utils.get_staged_diff(repo_path)
+    if not diff:
+        try:
+            result = subprocess.run(["git", "diff"], cwd=str(repo_path), capture_output=True, text=True)
+            diff = result.stdout if result.returncode == 0 else ""
+        except Exception:
+            pass
+
+    warnings = run_all_checks(repo_path, file_paths, diff or "")
+    if warnings:
+        console.print("[bold yellow]Pre‑commit Warnings:[/bold yellow]")
+        for w in warnings:
+            console.print(f"  • {w}")
+    else:
+        console.print("[green]All pre‑commit checks passed.[/green]")
+
+
+@cli.command()
+@click.argument("project_path", type=click.Path(exists=True, file_okay=False, resolve_path=True), default=".")
+def install_hook(project_path: str) -> None:
+    """Install a Git pre‑commit hook that calls GitPilot before every commit."""
+    repo_path = Path(project_path)
+    if not is_git_repo(repo_path):
+        console.print("[red]Not a Git repository.[/red]")
+        return
+    result = install_precommit_hook(repo_path)
+    if result:
+        for w in result:
+            console.print(f"[yellow]{w}[/yellow]")
+    else:
+        console.print("[green]Pre‑commit hook installed successfully.[/green]")
 
 
 if __name__ == "__main__":
