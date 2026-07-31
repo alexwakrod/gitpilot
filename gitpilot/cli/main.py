@@ -1236,6 +1236,11 @@ def config_set(key: str, value: str, value_type: str) -> None:
     )
     if resp.status_code == 200:
         console.print(f"[green]Setting '{key}' updated.[/green]")
+        # Notify daemon to reload config
+        try:
+            client.post("/api/v1/config/reload")
+        except Exception:
+            pass
     else:
         console.print(f"[red]Failed to set config: {resp.status_code} {resp.text}[/red]")
 
