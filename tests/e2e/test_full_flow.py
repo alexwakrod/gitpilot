@@ -166,7 +166,6 @@ class TestEndToEndFlow:
             assert "ui" in domains
 
     def test_push_failure_sends_sse_event(self):
-        """Simulate push failure and verify SSE event is emitted."""
         with patch("gitpilot.core.committer.AICommitter.generate_message", new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = "feat: sse push fail"
 
@@ -183,37 +182,38 @@ class TestEndToEndFlow:
             project_id = resp.json()["id"]
 
             lifecycle.start()
-            time.sleep(2.0)
-                    # Wait up to 5 seconds for events
-            for _ in range(10):
-                if events:
-                    break
-                time.sleep(0.5)
+            time.sleep(0.5)
 
             events = []
 
             def sse_listener():
-                with client.stream(
-                    "GET",
-                    "/api/v1/events",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                ) as response:
-                    for line in response.iter_lines():
-                        if line.startswith("event:"):
-                            event_type = line.split(":")[1].strip()
-                            data_line = next(response.iter_lines())
-                            if data_line.startswith("data:"):
-                                data = json.loads(data_line[5:].strip())
-                                events.append({"event": event_type, "data": data})
-                        if len(events) >= 2:
-                            break
+                try:
+                    with client.stream(
+                        "GET", "/api/v1/events",
+                        headers={"Authorization": f"Bearer {self.token}"},
+                    ) as response:
+                        for line in response.iter_lines():
+                            if line.startswith("event:"):
+                                event_type = line.split(":")[1].strip()
+                                data_line = next(response.iter_lines())
+                                if data_line.startswith("data:"):
+                                    data = json.loads(data_line[5:].strip())
+                                    events.append({"event": event_type, "data": data})
+                            if len(events) >= 2:
+                                break
+                except Exception:
+                    pass
 
             listener_thread = threading.Thread(target=sse_listener, daemon=True)
             listener_thread.start()
             time.sleep(0.5)
 
             (self.repo_path / "sse_test.txt").write_text("sse content")
-            time.sleep(2.5)
+            # Wait for events with retry
+            for _ in range(20):
+                if len(events) >= 2:
+                    break
+                time.sleep(0.5)
 
             lifecycle.stop()
             listener_thread.join(timeout=3)
@@ -225,7 +225,7 @@ class TestEndToEndFlow:
             push_fail_event = next(e for e in events if e["event"] == "push_failed")
             assert push_fail_event["data"]["project_id"] == project_id
             assert "error" in push_fail_event["data"]
-
+            
     def test_project_ready_check_on_add(self):
         """Adding a non‑git directory should fail with a clear message."""
         plain_dir = self.tmp_path / "not-a-repo"
