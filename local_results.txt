@@ -233,4 +233,358 @@ tests/unit/test_remaining_coverage.py::TestMainMenu::test_exit_option PASSED [ 8
 tests/unit/test_remaining_coverage.py::TestDirectoryPicker::test_render PASSED [ 83%]
 tests/unit/test_remaining_coverage.py::TestDirectoryPicker::test_pick_cancelled PASSED [ 83%]
 tests/unit/test_remaining_coverage.py::TestNonBlockingKeyReader::test_start_stop PASSED [ 84%]
-tests/unit/test_remaining_coverage.py::TestPickDirectoryGUI::test_fallback 
+tests/unit/test_remaining_coverage.py::TestPickDirectoryGUI::test_fallback FAILED [ 84%]
+tests/unit/test_remaining_coverage.py::TestSpawnNewTerminal::test_linux FAILED [ 84%]
+tests/unit/test_remaining_coverage.py::TestSpawnNewTerminal::test_macos PASSED [ 85%]
+tests/unit/test_remaining_coverage.py::TestSpawnNewTerminal::test_windows PASSED [ 85%]
+tests/unit/test_remaining_coverage.py::TestPrepareProjectDirectoryExtended::test_existing_remote_skips_creation PASSED [ 86%]
+tests/unit/test_remaining_coverage.py::TestGitPilotTUI::test_init PASSED [ 86%]
+tests/unit/test_remaining_coverage.py::TestGitPilotTUI::test_update_projects PASSED [ 86%]
+tests/unit/test_remaining_coverage.py::TestGitPilotTUI::test_update_commits PASSED [ 87%]
+tests/unit/test_remaining_coverage.py::TestGitPilotTUI::test_set_status PASSED [ 87%]
+tests/unit/test_remaining_coverage.py::TestNotifications::test_send_discord_notification_success PASSED [ 87%]
+tests/unit/test_remaining_coverage.py::TestNotifications::test_send_discord_notification_failure PASSED [ 88%]
+tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_list_projects_empty PASSED [ 88%]
+tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_create_project_invalid_path PASSED [ 89%]
+tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_create_project_valid PASSED [ 89%]
+tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_get_project_not_found PASSED [ 89%]
+tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_config_crud FAILED [ 90%]
+tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_unauthorized PASSED [ 90%]
+tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_sse_endpoint_connects +++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~ Stack of asyncio-portal-7a97483cbb90 (134790182409920) ~~~~~~~~~~~~
+  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/alexwakrod/gitpilot/.venv/lib/python3.12/site-packages/anyio/from_thread.py", line 536, in run_blocking_portal
+    run_eventloop(
+  File "/home/alexwakrod/gitpilot/.venv/lib/python3.12/site-packages/anyio/_core/_eventloop.py", line 83, in run
+    return async_backend.run(func, args, {}, backend_options)
+  File "/home/alexwakrod/gitpilot/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2481, in run
+    return runner.run(wrapper())
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 674, in run_until_complete
+    self.run_forever()
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 641, in run_forever
+    self._run_once()
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 1949, in _run_once
+    event_list = self._selector.select(timeout)
+  File "/usr/lib/python3.12/selectors.py", line 468, in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+FAILED                                                                   [ 90%]
+tests/unit/test_remaining_coverage_2.py::TestNotificationsFull::test_send_discord_notification_success PASSED [ 91%]
+tests/unit/test_remaining_coverage_2.py::TestNotificationsFull::test_send_discord_notification_http_error PASSED [ 91%]
+tests/unit/test_remaining_coverage_2.py::TestDatabaseInitialize::test_initialize_database_with_path PASSED [ 92%]
+tests/unit/test_remaining_coverage_2.py::TestDatabaseInitialize::test_managed_connection_rollback PASSED [ 92%]
+tests/unit/test_remaining_coverage_2.py::TestDatabaseInitialize::test_run_migrations_error PASSED [ 92%]
+tests/unit/test_remaining_coverage_2.py::TestDomainModels::test_project_create_relative_path_fails PASSED [ 93%]
+tests/unit/test_remaining_coverage_2.py::TestDomainModels::test_project_update_relative_path_fails PASSED [ 93%]
+tests/unit/test_remaining_coverage_2.py::TestDomainModels::test_project_update_no_path_ok PASSED [ 93%]
+tests/unit/test_remaining_coverage_2.py::TestDomainModels::test_setting_create_invalid_type PASSED [ 94%]
+tests/unit/test_remaining_coverage_2.py::TestPolicies::test_generate_api_token_length PASSED [ 94%]
+tests/unit/test_remaining_coverage_2.py::TestPolicies::test_ensure_token_file_creates_file PASSED [ 95%]
+tests/unit/test_remaining_coverage_2.py::TestPolicies::test_ensure_token_file_permissions PASSED [ 95%]
+tests/unit/test_remaining_coverage_2.py::TestPolicies::test_verify_owner_valid_token PASSED [ 95%]
+tests/unit/test_remaining_coverage_2.py::TestPolicies::test_verify_owner_invalid_token PASSED [ 96%]
+tests/unit/test_remaining_coverage_2.py::TestPolicies::test_verify_owner_no_token_file PASSED [ 96%]
+tests/unit/test_remaining_coverage_2.py::TestPolicies::test_get_current_os_user PASSED [ 96%]
+tests/unit/test_remaining_coverage_2.py::TestSettingsEdge::test_default_config_values PASSED [ 97%]
+tests/unit/test_remaining_coverage_2.py::TestSettingsEdge::test_load_with_defaults_merged PASSED [ 97%]
+tests/unit/test_remaining_coverage_2.py::TestSettingsEdge::test_save_creates_directory PASSED [ 98%]
+tests/unit/test_remaining_coverage_2.py::TestSettingsEdge::test_load_broken_json_falls_back PASSED [ 98%]
+tests/unit/test_remaining_coverage_2.py::TestSettingsEdge::test_delete_key_persists PASSED [ 98%]
+tests/unit/test_remaining_coverage_2.py::TestHTTPClient::test_get_http_client_returns_singleton PASSED [ 99%]
+tests/unit/test_remaining_coverage_2.py::TestHTTPClient::test_close_http_client PASSED [ 99%]
+tests/unit/test_remaining_coverage_2.py::TestHTTPClient::test_get_sync_client PASSED [100%]
+
+=================================== FAILURES ===================================
+_____________________ TestCLICommandsFast.test_add_project _____________________
+
+self = <gitpilot.tests.unit.test_cli_and_daemon_fast.TestCLICommandsFast object at 0x7a9749afc260>
+tmp_path = PosixPath('/tmp/pytest-of-alexwakrod/pytest-0/test_add_project0')
+
+    def test_add_project(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "t@t"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "T"], cwd=repo, capture_output=True)
+        (repo / "file").write_text("x")
+        subprocess.run(["git", "add", "file"], cwd=repo, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=repo, capture_output=True)
+        result = self.runner.invoke(cli, ["add", str(repo), "--name", "t"])
+>       assert "added" in result.output
+E       assert 'added' in "✓ Git repository found.\n✓ Repository has commits.\nNo .gitignore file found. Consider adding one to avoid committing artifacts.\nNo remote 'origin' configured.\nNo GitHub token configured. Run `gitpilot setup` to add one for automatic remote\ncreation.\nFailed to add project: 200 \n"
+E        +  where "✓ Git repository found.\n✓ Repository has commits.\nNo .gitignore file found. Consider adding one to avoid committing artifacts.\nNo remote 'origin' configured.\nNo GitHub token configured. Run `gitpilot setup` to add one for automatic remote\ncreation.\nFailed to add project: 200 \n" = <Result okay>.output
+
+tests/unit/test_cli_and_daemon_fast.py:59: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  gitpilot.core.git_utils:git_utils.py:63 Git command failed: ['git', 'remote', 'get-url', 'origin']
+error: No such remote 'origin'
+____________ TestCLIAutoStartFast.test_run_setup_if_needed_triggers ____________
+
+self = <gitpilot.tests.unit.test_daemon_fast.TestCLIAutoStartFast object at 0x7a9749b97d10>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7a97497636b0>
+tmp_path = PosixPath('/tmp/pytest-of-alexwakrod/pytest-0/test_run_setup_if_needed_trigg0')
+
+    def test_run_setup_if_needed_triggers(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("gitpilot.cli.main.get_token_path", lambda: tmp_path / "noauth")
+        monkeypatch.setattr("gitpilot.cli.main.SettingsManager.load", lambda self: {})
+        with patch("gitpilot.cli.main.console.print") as mp:
+>           _run_setup_if_needed()
+
+tests/unit/test_daemon_fast.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+gitpilot/cli/main.py:950: in _run_setup_if_needed
+    setup.callback()
+gitpilot/cli/main.py:960: in setup
+    gh_token = Prompt.ask(
+.venv/lib/python3.12/site-packages/rich/prompt.py:149: in ask
+    return _prompt(default=default, stream=stream)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/rich/prompt.py:292: in __call__
+    value = self.get_input(self.console, prompt, self.password, stream=stream)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/rich/prompt.py:211: in get_input
+    return console.input(prompt, password=password, stream=stream)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/rich/console.py:2184: in input
+    result = _getpass_mod.getpass("", stream=stream)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/getpass.py:77: in unix_getpass
+    passwd = _raw_input(prompt, stream, input=input)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prompt = '', stream = <_io.TextIOWrapper name=11 encoding='UTF-8'>
+input = <_io.TextIOWrapper name=11 encoding='UTF-8'>
+
+    def _raw_input(prompt="", stream=None, input=None):
+        # This doesn't save the string in the GNU readline history.
+        if not stream:
+            stream = sys.stderr
+        if not input:
+            input = sys.stdin
+        prompt = str(prompt)
+        if prompt:
+            try:
+                stream.write(prompt)
+            except UnicodeEncodeError:
+                # Use replace error handler to get as much as possible printed.
+                prompt = prompt.encode(stream.encoding, 'replace')
+                prompt = prompt.decode(stream.encoding)
+                stream.write(prompt)
+            stream.flush()
+        # NOTE: The Python C API calls flockfile() (and unlock) during readline.
+>       line = input.readline()
+               ^^^^^^^^^^^^^^^^
+E       Failed: Timeout (>5.0s) from pytest-timeout.
+
+/usr/lib/python3.12/getpass.py:146: Failed
+----------------------------- Captured stdout call -----------------------------
+GitHub Personal Access Token (repo scope) – leave blank to skip (): 
+______________________ TestPickDirectoryGUI.test_fallback ______________________
+
+self = <gitpilot.tests.unit.test_remaining_coverage.TestPickDirectoryGUI object at 0x7a9749a35310>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7a974842e600>
+
+    def test_fallback(self, monkeypatch):
+        monkeypatch.setattr("gitpilot.cli.main.tkinter", None, raising=False)
+        # Should return None on import error
+        try:
+>           result = _pick_directory_gui()
+                     ^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_remaining_coverage.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+gitpilot/cli/main.py:370: in _pick_directory_gui
+    folder = tkinter.filedialog.askdirectory(
+/usr/lib/python3.12/tkinter/filedialog.py:442: in askdirectory
+    return Directory(**options).show()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tkinter.filedialog.Directory object at 0x7a97486f93d0>, options = {}
+
+    def show(self, **options):
+    
+        # update instance options
+        for k, v in options.items():
+            self.options[k] = v
+    
+        self._fixoptions()
+    
+        master = self.master
+        if master is None:
+            master = _get_temp_root()
+        try:
+            self._test_callback(master)  # The function below is replaced for some tests.
+>           s = master.tk.call(self.command, *master._options(self.options))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: Timeout (>5.0s) from pytest-timeout.
+
+/usr/lib/python3.12/tkinter/commondialog.py:45: Failed
+_______________________ TestSpawnNewTerminal.test_linux ________________________
+
+self = <gitpilot.tests.unit.test_remaining_coverage.TestSpawnNewTerminal object at 0x7a9749a35610>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7a9748641970>
+
+    def test_linux(self, monkeypatch):
+>       monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/xterm")
+                            ^^^^^^
+E       NameError: name 'shutil' is not defined. Did you forget to import 'shutil'
+
+tests/unit/test_remaining_coverage.py:129: NameError
+________________________ TestDaemonAPI.test_config_crud ________________________
+
+self = <gitpilot.tests.unit.test_remaining_coverage.TestDaemonAPI object at 0x7a9749a376b0>
+
+    def test_config_crud(self):
+        # Set config
+        resp = self.client.put("/api/v1/config/theme", json={"value": "dark", "type": "string"}, headers={"Authorization": f"Bearer {self.token}"})
+>       assert resp.status_code == 200
+E       assert 404 == 200
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/unit/test_remaining_coverage.py:266: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-07-31T08:30:42 [INFO] gitpilot.infrastructure.db: Running database migrations...
+2026-07-31T08:30:43 [INFO] gitpilot.infrastructure.db: Migrations completed successfully
+------------------------------ Captured log setup ------------------------------
+INFO     gitpilot.infrastructure.db:db.py:122 Running database migrations...
+INFO     gitpilot.infrastructure.db:db.py:125 Migrations completed successfully
+----------------------------- Captured stdout call -----------------------------
+2026-07-31T08:30:43 [INFO] httpx: HTTP Request: PUT http://testserver/api/v1/config/theme "HTTP/1.1 404 Not Found"
+------------------------------ Captured log call -------------------------------
+INFO     httpx:_client.py:1025 HTTP Request: PUT http://testserver/api/v1/config/theme "HTTP/1.1 404 Not Found"
+___________________ TestDaemonAPI.test_sse_endpoint_connects ___________________
+
+self = <gitpilot.tests.unit.test_remaining_coverage.TestDaemonAPI object at 0x7a9749a2ec00>
+
+>   ???
+
+tests/unit/test_remaining_coverage.py:280: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.12/contextlib.py:137: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:868: in stream
+    response = self.send(
+.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/testclient.py:356: in handle_request
+    raise exc
+.venv/lib/python3.12/site-packages/starlette/testclient.py:353: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv/lib/python3.12/site-packages/anyio/from_thread.py:338: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/concurrent/futures/_base.py:451: in result
+    self._condition.wait(timeout)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Condition(<unlocked _thread.RLock object owner=0 count=0 at 0x7a97483fb280>, 0)>
+timeout = None
+
+    def wait(self, timeout=None):
+        """Wait until notified or until a timeout occurs.
+    
+        If the calling thread has not acquired the lock when this method is
+        called, a RuntimeError is raised.
+    
+        This method releases the underlying lock, and then blocks until it is
+        awakened by a notify() or notify_all() call for the same condition
+        variable in another thread, or until the optional timeout occurs. Once
+        awakened or timed out, it re-acquires the lock and returns.
+    
+        When the timeout argument is present and not None, it should be a
+        floating point number specifying a timeout for the operation in seconds
+        (or fractions thereof).
+    
+        When the underlying lock is an RLock, it is not released using its
+        release() method, since this may not actually unlock the lock when it
+        was acquired multiple times recursively. Instead, an internal interface
+        of the RLock class is used, which really unlocks it even when it has
+        been recursively acquired several times. Another internal interface is
+        then used to restore the recursion level when the lock is reacquired.
+    
+        """
+        if not self._is_owned():
+            raise RuntimeError("cannot wait on un-acquired lock")
+        waiter = _allocate_lock()
+        waiter.acquire()
+        self._waiters.append(waiter)
+        saved_state = self._release_save()
+        gotit = False
+        try:    # restore state no matter what (e.g., KeyboardInterrupt)
+            if timeout is None:
+>               waiter.acquire()
+E               Failed: Timeout (>5.0s) from pytest-timeout.
+
+/usr/lib/python3.12/threading.py:355: Failed
+---------------------------- Captured stdout setup -----------------------------
+2026-07-31T08:30:45 [INFO] gitpilot.infrastructure.db: Running database migrations...
+2026-07-31T08:30:46 [INFO] gitpilot.infrastructure.db: Migrations completed successfully
+------------------------------ Captured log setup ------------------------------
+INFO     gitpilot.infrastructure.db:db.py:122 Running database migrations...
+INFO     gitpilot.infrastructure.db:db.py:125 Migrations completed successfully
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/alexwakrod/gitpilot/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/e2e/test_full_flow.py: 4 warnings
+tests/unit/test_remaining_coverage.py: 7 warnings
+  /home/alexwakrod/gitpilot/gitpilot/daemon/app.py:86: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/e2e/test_full_flow.py: 8 warnings
+tests/unit/test_remaining_coverage.py: 14 warnings
+  /home/alexwakrod/gitpilot/.venv/lib/python3.12/site-packages/fastapi/applications.py:4681: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/e2e/test_full_flow.py: 4 warnings
+tests/unit/test_remaining_coverage.py: 7 warnings
+  /home/alexwakrod/gitpilot/gitpilot/daemon/app.py:92: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/unit/test_daemon_fast.py::TestDaemonServerFast::test_setup_logging_no_crash
+  /home/alexwakrod/gitpilot/.venv/lib/python3.12/site-packages/pythonjsonlogger/jsonlogger.py:11: DeprecationWarning: pythonjsonlogger.jsonlogger has been moved to pythonjsonlogger.json
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_cli_and_daemon_fast.py::TestCLICommandsFast::test_add_project
+FAILED tests/unit/test_daemon_fast.py::TestCLIAutoStartFast::test_run_setup_if_needed_triggers
+FAILED tests/unit/test_remaining_coverage.py::TestPickDirectoryGUI::test_fallback
+FAILED tests/unit/test_remaining_coverage.py::TestSpawnNewTerminal::test_linux
+FAILED tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_config_crud
+FAILED tests/unit/test_remaining_coverage.py::TestDaemonAPI::test_sse_endpoint_connects
+============ 6 failed, 259 passed, 46 warnings in 803.39s (0:13:23) ============
