@@ -1,5 +1,6 @@
 """CLI interface for GitPilot – fully interactive TUI with intelligent project setup,
-   API key validation, cross‑platform service, Qwen support, and all intelligence commands."""
+   API key validation, cross‑platform service, Qwen support, masked secrets,
+   and all intelligence commands."""
 
 import asyncio
 import json
@@ -36,7 +37,7 @@ from gitpilot.core.project_setup import (
 )
 from gitpilot.core.executor import GitExecutor
 from gitpilot.core.intelligence import DomainClassifier, CommitSplitter, OptimizationScanner
-from gitpilot.core import git_utils  # native Git porcelain
+from gitpilot.core import git_utils
 from gitpilot.infrastructure.db import managed_connection, get_db_path
 from gitpilot.infrastructure.repositories.commits import CommitsRepository
 from gitpilot.infrastructure.repositories.patterns import PatternsRepository
@@ -44,6 +45,20 @@ from gitpilot.infrastructure.repositories.patterns import PatternsRepository
 logger = logging.getLogger("gitpilot.cli")
 console = Console()
 
+# ---------------------------------------------------------------------------
+# Helpers – secret masking
+# ---------------------------------------------------------------------------
+def _mask_secret(value: str) -> str:
+    if not value:
+        return "(not set)"
+    if len(value) <= 10:
+        return value[:4] + "****"
+    return value[:8] + "…"
+
+SECRET_KEYS = {
+    "github_token", "grok_api_key", "groq_api_key", "qwen_api_key",
+    "openai_api_key", "anthropic_api_key",
+}
 
 # ============================================================================
 # Daemon communication helpers
@@ -212,7 +227,12 @@ def _validate_api_key_format(key: str, provider: str) -> bool:
 
 def _prompt_api_key_with_test(provider: str, default_key: str, model: str) -> str:
     while True:
-        key = Prompt.ask(f"{provider.capitalize()} API Key", password=True, default=default_key)
+        if default_key:
+            console.print(f"Current key: [dim]{_mask_secret(default_key)}[/dim]")
+        key = Prompt.ask(f"{provider.capitalize()} API Key", password=True, default="")
+        if not key and default_key:
+            # user entered empty – keep the old key
+            return default_key
         if provider == "ollama":
             return key
         if not _validate_api_key_format(key, provider):
@@ -404,18 +424,10 @@ def _spawn_in_new_terminal() -> None:
 # Comprehensive Git readiness check (interactive)
 # ============================================================================
 def _prepare_project_directory(path: Path, settings_mgr: SettingsManager) -> bool:
-    """
-    Check that the given path is a valid, ready Git repository.
-    If not, interactively guide the user to fix missing pieces
-    (git init, initial commit, remote setup, .gitignore, etc.).
-
-    Returns True if ready (or user fixed everything), False if user cancels.
-    """
     if not path.exists() or not path.is_dir():
         console.print("[red]The selected directory does not exist or is not a directory.[/red]")
         return False
 
-    # 1. Git repository?
     if not is_git_repo(path):
         console.print("[yellow]This directory is not a Git repository.[/yellow]")
         if not Confirm.ask("Would you like to initialize a Git repository here?", default=True):
@@ -428,7 +440,6 @@ def _prepare_project_directory(path: Path, settings_mgr: SettingsManager) -> boo
     else:
         console.print("[green]✓ Git repository found.[/green]")
 
-    # 2. At least one commit?
     if not git_utils.has_commits(path):
         console.print("[yellow]No commits found in this repository.[/yellow]")
         if Confirm.ask("Create an initial commit?", default=True):
@@ -436,15 +447,12 @@ def _prepare_project_directory(path: Path, settings_mgr: SettingsManager) -> boo
                 console.print("[red]Could not create initial commit. Proceeding anyway, but commits may fail.[/red]")
             else:
                 console.print("[green]Initial commit created.[/green]")
-        # Allow user to skip, but warn
     else:
         console.print("[green]✓ Repository has commits.[/green]")
 
-    # 3. .gitignore existence (optional but recommended)
     if not (path / ".gitignore").exists():
         console.print("[dim]No .gitignore file found. Consider adding one to avoid committing artifacts.[/dim]")
 
-    # 4. Remote origin?
     if not git_utils.has_remote_origin(path):
         console.print("[yellow]No remote 'origin' configured.[/yellow]")
         config = settings_mgr.load()
@@ -554,7 +562,6 @@ class MainMenu:
         console.clear()
         console.print(f"Selected: [bold]{path}[/bold]")
 
-        # Run comprehensive Git readiness check
         if not _prepare_project_directory(path, self.settings_mgr):
             console.print("[red]Project setup cancelled.[/red]")
             console.print("\nPress any key to continue...", end="")
@@ -572,7 +579,6 @@ class MainMenu:
         readchar.readkey()
 
     def _monitor(self):
-        # unchanged
         console.clear()
         try:
             resp = self.client.get("/api/v1/projects")
@@ -762,8 +768,14 @@ class MainMenu:
 
     def _change_github_token(self):
         config = self.settings_mgr.load()
+        current = config.get("github_token", "")
+        if current:
+            console.print(f"Current token: [dim]{_mask_secret(current)}[/dim]")
         token = Prompt.ask("GitHub Personal Access Token (repo scope)",
-                           password=True, default=config.get("github_token", ""))
+                           password=True, default="")
+        if not token and current:
+            console.print("[yellow]Keeping existing token.[/yellow]")
+            return
         if token and not token.startswith("ghp_") and len(token) < 40:
             console.print("[yellow]Token format may be invalid. Ensure it has 'repo' scope.[/yellow]")
         self.settings_mgr.set("github_token", token)
@@ -810,7 +822,7 @@ class MainMenu:
         self.settings_mgr.set("enable_splitting", split)
         optim = Confirm.ask("Enable optimization hints in commit messages?", default=config.get("enable_optimizations", False))
         self.settings_mgr.set("enable_optimizations", optim)
-        debounce = Prompt.ask("Debounce interval (seconds)", default=str(config.get("debounce_interval", 3)))
+        debounce = Prompt.ask("Debounce interval (seconds)", default=str(config.get("debounce_interval", 120)))
         self.settings_mgr.set("debounce_interval", int(debounce))
         console.print("[green]Settings updated.[/green]")
         time.sleep(1)
@@ -957,14 +969,20 @@ def setup():
     settings_mgr = SettingsManager()
     config = settings_mgr.load()
 
+    current_token = config.get("github_token", "")
+    if current_token:
+        console.print(f"Current token: [dim]{_mask_secret(current_token)}[/dim]")
     gh_token = Prompt.ask(
         "GitHub Personal Access Token (repo scope) – leave blank to skip",
         password=True,
-        default=config.get("github_token", ""),
+        default="",
     )
-    if gh_token and not gh_token.startswith("ghp_") and len(gh_token) < 40:
-        console.print("[yellow]Token format may be invalid. Ensure it has 'repo' scope.[/yellow]")
-    settings_mgr.set("github_token", gh_token)
+    if not gh_token and current_token:
+        console.print("[yellow]Keeping existing token.[/yellow]")
+    elif gh_token:
+        if not gh_token.startswith("ghp_") and len(gh_token) < 40:
+            console.print("[yellow]Token format may be invalid. Ensure it has 'repo' scope.[/yellow]")
+        settings_mgr.set("github_token", gh_token)
 
     ai_provider = Prompt.ask(
         "Choose AI provider",
@@ -1009,7 +1027,7 @@ def setup():
         else:
             console.print("[red]Could not connect to Ollama. Check URL and model.[/red]")
 
-    debounce = Prompt.ask("Debounce interval (seconds)", default=str(config.get("debounce_interval", 3)))
+    debounce = Prompt.ask("Debounce interval (seconds)", default=str(config.get("debounce_interval", 120)))
     settings_mgr.set("debounce_interval", int(debounce))
     smart = Confirm.ask("Enable smart grouping?", default=config.get("smart_grouping", True))
     settings_mgr.set("smart_grouping", smart)
@@ -1073,7 +1091,6 @@ def daemon_status() -> None:
 def add(path: str, name: Optional[str], github_repo: Optional[str]) -> None:
     """Register a project directory for auto‑commit watching."""
     dir_path = Path(path)
-    # Run readiness check locally before calling the daemon
     settings_mgr = SettingsManager()
     if not _prepare_project_directory(dir_path, settings_mgr):
         console.print("[red]Project setup cancelled due to readiness issues.[/red]")
@@ -1197,7 +1214,8 @@ def config_list() -> None:
         table.add_column("Value")
         table.add_column("Type")
         for item in items:
-            table.add_row(item["key"], item["value"], item["type"])
+            display_value = _mask_secret(item["value"]) if item["key"] in SECRET_KEYS else item["value"]
+            table.add_row(item["key"], display_value, item["type"])
         console.print(table)
     else:
         console.print(f"[red]Failed to fetch config: {resp.status_code}[/red]")
@@ -1277,7 +1295,7 @@ def watch() -> None:
 
 
 # ------------------------------------------------------------------
-# Intelligence commands (using git_utils)
+# Intelligence commands
 # ------------------------------------------------------------------
 
 @cli.command()
