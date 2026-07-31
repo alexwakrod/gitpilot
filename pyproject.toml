@@ -43,7 +43,6 @@ packages = [
     "gitpilot.cli",
     "gitpilot.daemon",
     "gitpilot.core",
-    "gitpilot.core.precommit",   # <-- new
     "gitpilot.domain",
     "gitpilot.infrastructure",
     "gitpilot.infrastructure.repositories",
