@@ -98,9 +98,8 @@ class TestCommitsRepository:
         cid = commits_repo.create(
             pid, "e" * 40, "feat: one", domain="backend", branch="feat/x",
         )
-        # Mark squash candidates
         updated = commits_repo.mark_squash_candidates(pid, "feat/x", "backend", max_age_minutes=60)
-        assert updated == 1
+        assert updated == 1  # returns integer count
         commit = commits_repo.get_by_id(cid)
         assert commit["squash_candidate"] is True
 
@@ -136,7 +135,7 @@ class TestDiscordWebhooksRepository:
         pid = projects_repo.create("proj-webhook", "/tmp/web", "alex")
         hooks_repo = DiscordWebhooksRepository(memory_db)
         wid = hooks_repo.create(pid, "https://discord.com/api/webhooks/123/abc")
-        assert wid > 0
+        assert wid > 0  # returns integer ID
         hooks = hooks_repo.list_by_project(pid)
         assert len(hooks) == 1
         assert hooks[0]["url"] == "https://discord.com/api/webhooks/123/abc"
@@ -147,7 +146,8 @@ class TestDiscordWebhooksRepository:
         pid = projects_repo.create("p", "/p", "alex")
         hooks_repo = DiscordWebhooksRepository(memory_db)
         wid = hooks_repo.create(pid, "https://discord.com/api/webhooks/456/def")
-        hooks_repo.set_enabled(wid, False)
+        result = hooks_repo.set_enabled(wid, False)
+        assert result is True  # set_enabled returns True on success
         hooks = hooks_repo.list_by_project(pid)
         assert len(hooks) == 0  # list only enabled
         hook = hooks_repo.get_by_id(wid)
