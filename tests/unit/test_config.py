@@ -12,12 +12,11 @@ class TestSettingsManager:
     @pytest.fixture
     def temp_config_dir(self, tmp_path):
         config_path = tmp_path / "config.json"
-        # Write default config
         default_config = {
             "ai_provider": "grok",
             "ai_model": "grok-2",
             "ai_temperature": 0.5,
-            "debounce_interval": 3,
+            "debounce_interval": 120,
             "smart_grouping": True,
             "branch_aware_messages": True,
             "max_commit_retries": 3,
@@ -31,7 +30,7 @@ class TestSettingsManager:
         manager = SettingsManager(config_path=temp_config_dir)
         config = manager.load()
         assert config["ai_provider"] == "grok"
-        assert config["debounce_interval"] == 3
+        assert config["debounce_interval"] == 120
 
     def test_get_single_value(self, temp_config_dir):
         manager = SettingsManager(config_path=temp_config_dir)
@@ -54,3 +53,13 @@ class TestSettingsManager:
         config = manager.load()
         assert config["ai_provider"] == "grok"
         assert config["theme"] == "dark"
+        assert config["debounce_interval"] == 120
+
+    def test_delete_key_reverts_to_default_on_reload(self, temp_config_dir):
+        manager = SettingsManager(config_path=temp_config_dir)
+        manager.delete("theme")
+        # After deletion, value should be removed from current in-memory data
+        assert manager.get("theme") is None
+        # Reload manager: defaults should re-apply
+        manager2 = SettingsManager(config_path=temp_config_dir)
+        assert manager2.get("theme") == "dark"
