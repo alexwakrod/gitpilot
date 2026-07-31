@@ -58,8 +58,8 @@ class TestSettingsManager:
     def test_delete_key_reverts_to_default_on_reload(self, temp_config_dir):
         manager = SettingsManager(config_path=temp_config_dir)
         manager.delete("theme")
-        # After deletion, value should be removed from current in-memory data
-        assert manager2.get("theme") == "dark"
-        # Reload manager: defaults should re-apply
+        # After deletion, value should be removed from current in‑memory data
+        assert manager.get("theme") is None
+        # Reload manager: defaults should re‑apply
         manager2 = SettingsManager(config_path=temp_config_dir)
         assert manager2.get("theme") == "dark"
