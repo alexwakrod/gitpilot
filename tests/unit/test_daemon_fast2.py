@@ -1,4 +1,4 @@
-"""Fast daemon tests – no threads, no real watcher."""
+"""Fast daemon tests – no threads, reload_config coverage."""
 
 import subprocess
 from pathlib import Path
@@ -24,7 +24,7 @@ class TestDaemonServerFast:
         assert path.read_text() == "44444"
 
     def test_setup_logging(self, tmp_path):
-        setup_logging(tmp_path / "logs")  # no crash
+        setup_logging(tmp_path / "logs")
 
 
 class TestDaemonLifecycleFast2:
@@ -32,10 +32,11 @@ class TestDaemonLifecycleFast2:
         monkeypatch.setattr("gitpilot.domain.settings.get_gitpilot_dir", lambda: tmp_path)
         monkeypatch.setattr("gitpilot.infrastructure.db.get_gitpilot_dir", lambda: tmp_path)
         initialize_database(tmp_path / "data.db")
+        # Prevent actual threading: mock Thread.start and Thread.join
+        monkeypatch.setattr("threading.Thread.start", lambda self: None)
+        monkeypatch.setattr("threading.Thread.join", lambda self, timeout=None: None)
         lc = DaemonLifecycle({"debounce_interval": 1, "max_commit_retries": 0})
         lc.watcher = MagicMock()
-        # Prevent the threading.Thread call entirely
-        monkeypatch.setattr("threading.Thread", MagicMock())
         lc.start()
         lc.stop()
 
@@ -48,10 +49,16 @@ class TestDaemonLifecycleFast2:
         lc.watcher.remove_project.assert_called_once()
 
     def test_reload_config(self):
-        lc = DaemonLifecycle({"enable_splitting": True})
+        lc = DaemonLifecycle({"enable_splitting": True, "enable_ai_grouping": False})
         lc.watcher = MagicMock()
-        lc.watcher._watchers = {}
-        lc.reload_config({"enable_splitting": False})
+        lc.watcher._watchers = {"proj": MagicMock()}
+        lc.reload_config({"enable_splitting": False, "enable_ai_grouping": True, "enable_optimizations": True})
+        # Committer provider should remain unchanged if not in new config
+        assert lc.committer.provider == "grok"  # default
+        # Flags should be updated
+        assert lc.enable_splitting is False
+        assert lc.enable_ai_grouping is True
+        assert lc.enable_optimizations is True
 
     def test_verify_global_git_config(self, monkeypatch):
         lc = DaemonLifecycle({})
