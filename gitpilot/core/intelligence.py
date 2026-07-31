@@ -397,14 +397,7 @@ class CommitSplitter:
         if not self.enable_splitting:
             return [{"files": files, "suggested_scope": "mixed", "domain": "mixed"}]
 
-        # Layer 1 – Hard atomic rules
-        atomic_sets = AtomicGroupDetector.detect(files)
-        atomic_groups = [sorted(list(s), key=str) for s in atomic_sets]
-        # If atomic detection already groups everything into one set, return it
-        if len(atomic_groups) == 1:
-            return [{"files": atomic_groups[0], "suggested_scope": "mixed", "domain": "mixed"}]
-
-        # Layer 2 – AI grouping (if enabled)
+        # If AI grouping is enabled, use the full pipeline (atomic + AI)
         if self.ai_grouper:
             import asyncio
             try:
@@ -414,12 +407,11 @@ class CommitSplitter:
                         item["domain"] = item.get("suggested_scope", "mixed")
                     return plan
             except Exception as exc:
-                logger.warning("AI grouping failed in commit_plan: %s", exc)
-            # Fallback – all files in one mixed group
+                logger.warning("AI grouping failed: %s", exc)
+            # Fallback for AI‑on failures: one mixed group
             return [{"files": files, "suggested_scope": "mixed", "domain": "mixed"}]
 
-        # Layer 3 – Domain splitting (only when AI grouping is disabled)
-        # But even here, we start with atomic groups and then domain‑classify within each atom
+        # AI grouping disabled → classic domain split (unchanged behaviour)
         groups = self.split(files, project_root, project_id)
         plan = []
         for domain, domain_files in groups.items():
@@ -430,7 +422,6 @@ class CommitSplitter:
                 "suggested_scope": scope,
             })
         return plan
-
 
 # ===========================================================================
 # Optimization scanner (unchanged)
