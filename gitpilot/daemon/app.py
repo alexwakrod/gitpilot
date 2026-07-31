@@ -94,6 +94,14 @@ def create_app(
         global _main_loop
         _main_loop = None
 
+    @app.post("/api/v1/config/reload", status_code=200)
+    async def reload_config(owner: str = Depends(validate_token)):
+        """Reload daemon configuration from disk (called by CLI after config changes)."""
+        new_config = SettingsManager().load()
+        lifecycle.reload_config(new_config)
+        logger.info("Configuration reloaded")
+        return {"detail": "Configuration reloaded"}
+        
     # ------------------------------------------------------------------
     # Thread‑safe event broadcasting
     # ------------------------------------------------------------------
