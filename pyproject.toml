@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gitpilot-ai"
-version = "0.2.1"
+version = "0.2.3"
 description = "Local AI-powered Git auto-committer daemon"
 authors = [{ name = "Alex Wakrod", email = "alexwakrod@gmail.com" }]
 license = "MIT"
