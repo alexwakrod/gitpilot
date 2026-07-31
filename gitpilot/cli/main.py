@@ -912,7 +912,7 @@ def _install_windows_service() -> None:
 # Click CLI group
 # ============================================================================
 @click.group(invoke_without_command=True)
-@click.version_option(version="0.2.0")
+@click.version_option(version="0.2.1")
 @click.pass_context
 def cli(ctx):
     """GitPilot – AI-powered Git auto‑committer."""
