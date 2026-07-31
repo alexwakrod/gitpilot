@@ -1,1 +1,0 @@
-"""Daemon layer - FastAPI application, server entrypoint, lifecycle."""

@@ -12,11 +12,7 @@ def build_commit_prompt(
     branch: Optional[str] = None,
     scope_hint: Optional[str] = None,
 ) -> str:
-    """Construct the AI prompt for generating a conventional commit message.
-    
-    If scope_hint is provided (e.g., 'ui', 'backend', 'database'), it becomes the
-    default scope suggestion for the AI.
-    """
+    """Construct the AI prompt for generating a conventional commit message."""
     scope_instruction = ""
     if scope_hint and scope_hint not in ("general", "other"):
         scope_instruction = (
@@ -50,19 +46,13 @@ def clean_commit_message(raw: str) -> str:
     """Clean and normalize the AI-generated commit message."""
     if not raw:
         return ""
-    # Remove triple backticks and code fences
     cleaned = re.sub(r"```[\w]*\n?", "", raw)
     cleaned = cleaned.replace("```", "")
-    # Remove surrounding quotes
     cleaned = cleaned.strip().strip('"').strip("'")
-    # Remove leading bullet or dash
     cleaned = re.sub(r"^[-*]\s+", "", cleaned.strip())
-    # Remove common AI preamble text
     cleaned = re.sub(r"^(here is the commit message:?\s*)", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^(the commit message is:?\s*)", "", cleaned, flags=re.IGNORECASE)
-    # Collapse multiple newlines
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    # Remove leading/trailing parentheses if they enclose the whole message
     if cleaned.startswith("(") and cleaned.endswith(")"):
         cleaned = cleaned[1:-1].strip()
     return cleaned.strip()
@@ -78,22 +68,26 @@ class AICommitter:
         temperature: float = 0.5,
         grok_api_key: Optional[str] = None,
         groq_api_key: Optional[str] = None,
+        qwen_api_key: Optional[str] = None,
         openai_api_key: Optional[str] = None,
         anthropic_api_key: Optional[str] = None,
         ollama_base_url: str = "http://localhost:11434",
         ollama_model: str = "llama3",
         groq_model: str = "llama3-70b-8192",
+        qwen_model: str = "qwen-plus",
     ):
         self.provider = provider
         self.model = model
         self.temperature = temperature
         self.grok_api_key = grok_api_key
         self.groq_api_key = groq_api_key
+        self.qwen_api_key = qwen_api_key
         self.openai_api_key = openai_api_key
         self.anthropic_api_key = anthropic_api_key
         self.ollama_base_url = ollama_base_url
         self.ollama_model = ollama_model
         self.groq_model = groq_model
+        self.qwen_model = qwen_model
 
     async def generate_message(
         self,
@@ -101,13 +95,6 @@ class AICommitter:
         branch: Optional[str] = None,
         scope_hint: Optional[str] = None,
     ) -> Optional[str]:
-        """Generate a commit message using the configured AI provider.
-        
-        Args:
-            diff: The git diff text.
-            branch: Optional branch name for branch‑aware messages.
-            scope_hint: Optional domain hint (e.g., 'ui', 'backend') to guide the scope.
-        """
         prompt = build_commit_prompt(diff, branch, scope_hint)
 
         try:
@@ -115,6 +102,8 @@ class AICommitter:
                 return await self._call_grok(prompt)
             elif self.provider == "groq":
                 return await self._call_groq(prompt)
+            elif self.provider == "qwen":
+                return await self._call_qwen(prompt)
             elif self.provider == "openai":
                 return await self._call_openai(prompt)
             elif self.provider == "anthropic":
@@ -178,6 +167,31 @@ class AICommitter:
             raw = data["choices"][0]["message"]["content"]
             return clean_commit_message(raw)
 
+    async def _call_qwen(self, prompt: str) -> Optional[str]:
+        import httpx
+        if not self.qwen_api_key:
+            logger.error("Qwen API key not configured")
+            return None
+        headers = {
+            "Authorization": f"Bearer {self.qwen_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.qwen_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": self.temperature,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            raw = data["choices"][0]["message"]["content"]
+            return clean_commit_message(raw)
+
     async def _call_openai(self, prompt: str) -> Optional[str]:
         import httpx
         if not self.openai_api_key:
@@ -194,7 +208,7 @@ class AICommitter:
         }
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
-                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+                "https://api.openai.com/v1/chat/completions",
                 headers=headers,
                 json=payload,
             )

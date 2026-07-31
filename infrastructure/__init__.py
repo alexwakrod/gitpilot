@@ -1,1 +1,0 @@
-"""Infrastructure layer - database, HTTP client, repositories."""
