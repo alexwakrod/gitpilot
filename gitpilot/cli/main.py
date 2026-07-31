@@ -952,6 +952,11 @@ def setup():
         settings_mgr.set("ollama_model", model)
         console.print("[cyan]Testing connection to Ollama...[/cyan]")
         ok = asyncio.run(_test_ollama_connection(url, model))
+    elif ai_provider == "qwen":
+        model = Prompt.ask("Model", default=config.get("qwen_model", "qwen-plus"))
+        settings_mgr.set("qwen_model", model)
+        key = _prompt_api_key_with_test("qwen", config.get("qwen_api_key", ""), model)
+        settings_mgr.set("qwen_api_key", key)
         if ok:
             console.print("[green]Ollama connection successful.[/green]")
         else:
