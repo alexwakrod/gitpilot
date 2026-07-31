@@ -1,4 +1,4 @@
-"""Fast unit tests for the intelligence engine – no blocking I/O."""
+"""Fast unit tests for the intelligence engine – deterministic domain splitting (AI grouping disabled)."""
 
 import tempfile
 from pathlib import Path
@@ -62,21 +62,21 @@ class TestDomainClassifierFast:
 class TestCommitSplitterFast:
     def test_split_enabled(self):
         c = DomainClassifier()
-        s = CommitSplitter(c, enable_splitting=True)
+        s = CommitSplitter(c, enable_splitting=True, use_ai_grouping=False)
         groups = s.split([Path("components/B.jsx"), Path("services/S.py")])
         assert "ui" in groups
         assert "backend" in groups
 
     def test_split_disabled(self):
         c = DomainClassifier()
-        s = CommitSplitter(c, enable_splitting=False)
+        s = CommitSplitter(c, enable_splitting=False, use_ai_grouping=False)
         groups = s.split([Path("a.py"), Path("b.jsx")])
         assert "general" in groups
         assert len(groups) == 1
 
     def test_commit_plan(self):
         c = DomainClassifier()
-        s = CommitSplitter(c)
+        s = CommitSplitter(c, use_ai_grouping=False)
         plan = s.commit_plan([Path("components/B.jsx")])
         assert plan[0]["suggested_scope"] == "ui"
 

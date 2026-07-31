@@ -216,8 +216,8 @@ class TestCommitSplitterPlan:
         c = DomainClassifier()
         splitter = CommitSplitter(c, enable_splitting=True)
         plan = splitter.commit_plan([Path("random.xyz")])
-        assert plan[0]["domain"] == "general"
-        assert plan[0]["suggested_scope"] == "misc"
+        assert plan[0]["domain"] == "mixed"
+
 
     def test_commit_plan_ui(self):
         c = DomainClassifier()

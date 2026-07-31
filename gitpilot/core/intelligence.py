@@ -368,6 +368,25 @@ class CommitSplitter:
         if use_ai_grouping and ai_committer and project_root:
             self.ai_grouper = AICommitGrouper(ai_committer, project_root)
 
+    def split(
+        self,
+        files: List[Path],
+        project_root: Optional[Path] = None,
+        project_id: Optional[int] = None,
+    ) -> Dict[str, List[Path]]:
+        """Return a {domain: [files]} dict for backward compatibility.
+           If AI grouping is enabled, all files go into 'mixed'."""
+        if self.ai_grouper:
+            return {"mixed": files}
+        # Manual domain splitting
+        groups: Dict[str, List[Path]] = {}
+        for f in files:
+            domain = self.classifier.classify(f, project_root)
+            groups.setdefault(domain, []).append(f)
+        if "other" in groups:
+            groups.setdefault("general", []).extend(groups.pop("other"))
+        return groups
+
     def commit_plan(
         self,
         files: List[Path],
