@@ -27,8 +27,13 @@ class SettingsRepository:
             raw_value = row["value"]
             value_type = row["type"]
             try:
-                parsed = json.loads(raw_value) if raw_value else None
-            except json.JSONDecodeError:
+                if isinstance(raw_value, (int, float, bool, type(None))):
+                    parsed = raw_value
+                elif isinstance(raw_value, str):
+                    parsed = json.loads(raw_value)
+                else:
+                    parsed = raw_value
+            except (json.JSONDecodeError, TypeError):
                 parsed = raw_value
             result[key] = {"value": parsed, "type": value_type, "updated_at": row["updated_at"]}
         return result
@@ -43,8 +48,13 @@ class SettingsRepository:
             return None
         raw_value = row["value"]
         try:
-            parsed = json.loads(raw_value)
-        except json.JSONDecodeError:
+            if isinstance(raw_value, (int, float, bool, type(None))):
+                parsed = raw_value
+            elif isinstance(raw_value, str):
+                parsed = json.loads(raw_value)
+            else:
+                parsed = raw_value
+        except (json.JSONDecodeError, TypeError):
             parsed = raw_value
         return {
             "key": row["key"],
