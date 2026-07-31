@@ -135,7 +135,7 @@ class AICommitter:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.temperature,
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 "https://api.x.ai/v1/chat/completions",
                 headers=headers,
@@ -160,7 +160,7 @@ class AICommitter:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.temperature,
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers=headers,
@@ -185,7 +185,7 @@ class AICommitter:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.temperature,
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
                 headers=headers,
@@ -210,7 +210,7 @@ class AICommitter:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.temperature,
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers=headers,
@@ -237,7 +237,7 @@ class AICommitter:
             "temperature": self.temperature,
             "messages": [{"role": "user", "content": prompt}],
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers=headers,
@@ -256,7 +256,7 @@ class AICommitter:
             "stream": False,
             "options": {"temperature": self.temperature},
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{self.ollama_base_url}/api/generate",
                 json=payload,

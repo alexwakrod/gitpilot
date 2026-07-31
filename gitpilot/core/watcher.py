@@ -1,5 +1,6 @@
 """File watching service with debounce, AI‑powered grouping, domain isolation,
-   optimization hints, file association learning, and behavior pattern tracking."""
+   optimization hints, file association learning, behavior pattern tracking,
+   and automatic ignore of common build/virtual‑env artifacts."""
 
 import asyncio
 import hashlib
@@ -31,6 +32,14 @@ from gitpilot.infrastructure.repositories.patterns import PatternsRepository
 from gitpilot.domain.policies import get_current_os_user
 
 logger = logging.getLogger("gitpilot.watcher")
+
+# Always‑ignored path patterns (relative or absolute fragments)
+ALWAYS_IGNORE = {
+    ".venv", "venv", ".env", "__pycache__", "*.pyc", "*.pyo",
+    "dist", "build", "*.egg-info", "*.egg", "node_modules",
+    ".git", ".svn", ".hg", ".tox", ".mypy_cache", ".pytest_cache",
+    ".ruff_cache",
+}
 
 
 class FileHashCache:
@@ -76,6 +85,24 @@ class ChangeAccumulator:
     @property
     def last_event(self) -> float:
         return self._last_event_time
+
+
+def _is_always_ignored(path: Path) -> bool:
+    """Return True if the path matches any always‑ignored pattern."""
+    path_str = str(path).replace("\\", "/")
+    parts = path_str.split("/")
+    for part in parts:
+        if part in ALWAYS_IGNORE:
+            return True
+    # Check full path against wildcard patterns
+    for pattern in ALWAYS_IGNORE:
+        if pattern.startswith("*."):
+            ext = pattern[1:]
+            if path_str.endswith(ext):
+                return True
+        elif f"/{pattern}/" in f"/{path_str}/" or path_str.startswith(pattern + "/"):
+            return True
+    return False
 
 
 class ProjectWatcher:
@@ -131,6 +158,8 @@ class ProjectWatcher:
         if not self._running:
             return
         src_path = Path(event.src_path)
+        if _is_always_ignored(src_path):
+            return
         if self._is_git_path(src_path):
             return
         if src_path.name.endswith(("~", ".swp", ".swx", ".tmp", ".bak")):
@@ -203,6 +232,8 @@ class ProjectWatcher:
         rel_paths: List[Path] = []
         for c in changes:
             abs_path = self.project_path / c.file_path
+            if _is_always_ignored(abs_path):
+                continue
             if c.is_deleted:
                 rel_paths.append(c.file_path)
             elif abs_path.exists():
@@ -211,7 +242,6 @@ class ProjectWatcher:
         if not rel_paths:
             return
 
-        # Use AI‑powered grouping or domain split
         commit_plan = self.commit_splitter.commit_plan(
             files=[self.project_path / p for p in rel_paths],
             project_root=self.project_path,
