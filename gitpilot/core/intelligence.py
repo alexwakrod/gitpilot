@@ -1,17 +1,19 @@
-"""Intelligence Engine: atomic, context‑aware AI‑powered commit grouping, domain classification, and optimization hints."""
+"""Intelligence Engine: atomic, context‑aware, type‑smart AI‑powered commit
+   grouping, domain classification, fix detection, and optimization hints."""
 
 import ast
 import asyncio
 import json
 import logging
 import re
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("gitpilot.intelligence")
 
 # ---------------------------------------------------------------------------
-# Domain rules (unchanged)
+# Domain rules – order matters: more specific rules must come first
 # ---------------------------------------------------------------------------
 DOMAIN_RULES: Dict[str, List[str]] = {
     "test": [
@@ -47,9 +49,11 @@ UI_FRAMEWORKS = {"tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6", "wx", "kivy"
 
 
 # ===========================================================================
-# Domain classifier 
+# Domain classifier
 # ===========================================================================
 class DomainClassifier:
+    """Assigns a domain to each file path using path heuristics and AST analysis."""
+
     def __init__(self, user_map_path: Optional[Path] = None):
         self.user_map: Dict[str, str] = {}
         if user_map_path and user_map_path.exists():
@@ -144,7 +148,7 @@ class DomainClassifier:
 
 
 # ===========================================================================
-# Atomic group detector (unchanged)
+# Atomic group detector (hard rules that must never be split)
 # ===========================================================================
 class AtomicGroupDetector:
     ATOMIC_PATTERNS = [
@@ -186,7 +190,7 @@ class AtomicGroupDetector:
 
 
 # ===========================================================================
-# AI‑powered commit grouper (context‑aware)
+# AI‑powered commit grouper (context‑aware, type‑smart, with fix detection)
 # ===========================================================================
 class AICommitGrouper:
     def __init__(self, ai_committer, project_root: Path):
@@ -200,6 +204,7 @@ class AICommitGrouper:
         if len(files) <= 1:
             return [{"description": "chore: update files", "files": files, "suggested_scope": "general"}]
 
+        # Build file descriptions with diff‑hunk summaries (up to 300 chars)
         file_desc = []
         for f in files:
             try:
@@ -209,12 +214,19 @@ class AICommitGrouper:
             domain = self.classifier.classify(f, self.project_root)
             preview = ""
             try:
-                preview = f.read_text(encoding="utf-8")[:80].replace("\n", " ")
+                diff_out = subprocess.run(
+                    ["git", "diff", "--cached", "--", rel],
+                    cwd=str(self.project_root), capture_output=True, text=True, timeout=5,
+                )
+                if diff_out.returncode == 0 and diff_out.stdout.strip():
+                    preview = diff_out.stdout.strip()[:300].replace("\n", " ")
+                else:
+                    preview = f.read_text(encoding="utf-8")[:80].replace("\n", " ")
             except Exception:
                 pass
             file_desc.append(f"  {rel}  (domain: {domain})  [{preview}]")
 
-        # Build context from recent commits
+        # Build context from recent commits (last 10)
         context = ""
         if project_id is not None:
             try:
@@ -231,25 +243,71 @@ class AICommitGrouper:
             except Exception as exc:
                 logger.debug("Failed to fetch recent commits for context: %s", exc)
 
+        # Pre‑analyse the combined diff for fix‑indicative keywords
+        fix_hints: Dict[str, str] = {}
+        fix_patterns = [
+            r"fix", r"bug", r"issue", r"regression", r"error", r"exception",
+            r"patch", r"resolve", r"workaround", r"correct", r"typo",
+            r"crash", r"hang", r"deadlock", r"race condition",
+        ]
+        try:
+            combined_diff = subprocess.run(
+                ["git", "diff", "--cached"],
+                cwd=str(self.project_root), capture_output=True, text=True, timeout=5,
+            ).stdout
+            if combined_diff:
+                for pattern in fix_patterns:
+                    matches = list(re.finditer(pattern, combined_diff, re.IGNORECASE))
+                    if matches:
+                        for m in matches:
+                            line_start = combined_diff.rfind("\n", 0, m.start()) + 1
+                            line = combined_diff[line_start:combined_diff.find("\n", m.end())]
+                            file_match = re.search(r"^\+\+\+ b/(.+)", line, re.MULTILINE)
+                            if not file_match:
+                                preceding = combined_diff[:line_start]
+                                file_match = re.search(r"^\+\+\+ b/(.+)$", preceding, re.MULTILINE)
+                            if file_match:
+                                fname = file_match.group(1)
+                                if fname not in fix_hints:
+                                    fix_hints[fname] = pattern
+        except Exception:
+            pass
+
+        fix_hint_text = ""
+        if fix_hints:
+            fix_hint_text = (
+                "IMPORTANT HINT: Several changed files contain keywords that strongly suggest "
+                "this change is a bug fix or correction (e.g., 'fix', 'bug', 'error', 'typo'). "
+                "If you determine that a group of files is indeed a fix, use the conventional commit type "
+                "'fix' (e.g., 'fix(scope): description'). Otherwise, use the type that best matches "
+                "the intent (feat, chore, docs, style, refactor, perf, test, ci, build).\n\n"
+            )
+
+        # Build final prompt
         prompt = (
             "You are an expert developer assistant.  A developer has just modified "
             "several files in their project.  Your job is to understand the *intent* "
             "behind the changes and group the files into logical commits.\n\n"
             + context +
+            fix_hint_text +
             "For each group, write a short conventional‑commit message (type(scope): description) "
             "that explains the true purpose of that group of changes.  Then list the relative "
             "file paths that belong to that group.\n\n"
             "CRITICAL: if the changes are part of the same overall purpose (e.g. a version bump, "
             "a bug fix, a feature addition), they MUST stay together in the same group.  "
             "Only create separate groups when the changes are truly independent.\n\n"
+            "Allowed types: feat, fix, docs, style, refactor, perf, test, chore, ci, build.\n"
+            "Use 'fix' when the change corrects a bug, error, typo, or incorrect behaviour.\n\n"
             "If you are unsure, put everything in ONE group with a message like "
             "\"chore: batch update\".\n\n"
             "Output ONLY a JSON array of objects, each with keys:\n"
             "  - \"description\": a short commit message (string)\n"
             "  - \"files\": list of relative paths (strings)\n\n"
-            "Example output:\n"
-            '[{"description": "feat(backend): add user authentication module", '
-            '"files": ["backend/auth.py", "backend/models.py", "tests/test_auth.py"]}]\n\n'
+            "Example output (including a fix):\n"
+            '[{"description": "fix(backend): correct token expiry validation", '
+            '"files": ["backend/auth.py"]},\n'
+            ' {"description": "feat(ui): add password reset form", '
+            '"files": ["components/ResetForm.jsx", "pages/reset.tsx"]}]\n\n'
             "Files:\n"
         ) + "\n".join(file_desc)
 
@@ -288,6 +346,7 @@ class AICommitGrouper:
                     })
             if result:
                 result = self._enforce_atomic_merge(files, result)
+                result = self._enforce_fix_type_if_heuristics_matched(result, fix_hints)
                 return result
             else:
                 return self._fallback_mixed(files)
@@ -324,6 +383,30 @@ class AICommitGrouper:
             seen = set()
             for g in groups:
                 g["files"] = [f for f in g["files"] if not (f in seen or seen.add(f))]
+        return groups
+
+    def _enforce_fix_type_if_heuristics_matched(
+        self, groups: List[Dict[str, Any]], fix_hints: Dict[str, str]
+    ) -> List[Dict[str, Any]]:
+        """If any file in a group has a strong fix hint and the generated description
+        does not start with 'fix', change the commit type to 'fix'."""
+        for group in groups:
+            for f in group["files"]:
+                try:
+                    rel = str(f.relative_to(self.project_root))
+                except ValueError:
+                    rel = str(f)
+                if rel in fix_hints:
+                    desc = group.get("description", "")
+                    if not desc.lower().startswith("fix"):
+                        group["description"] = re.sub(
+                            r"^(feat|chore|docs|style|refactor|perf|test|ci|build)",
+                            "fix",
+                            desc,
+                            count=1,
+                            flags=re.IGNORECASE,
+                        )
+                    break
         return groups
 
 
