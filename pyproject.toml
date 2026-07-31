@@ -48,5 +48,8 @@ packages = [
     "gitpilot.infrastructure.repositories",
 ]
 
+[tool.coverage.report]
+fail_under = 60
+
 [tool.setuptools.dynamic]
 readme = { file = "README.md", content-type = "text/markdown" }
