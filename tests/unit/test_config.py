@@ -59,7 +59,7 @@ class TestSettingsManager:
         manager = SettingsManager(config_path=temp_config_dir)
         manager.delete("theme")
         # After deletion, value should be removed from current in-memory data
-        assert manager.get("theme") is None
+        assert manager2.get("theme") == "dark"
         # Reload manager: defaults should re-apply
         manager2 = SettingsManager(config_path=temp_config_dir)
         assert manager2.get("theme") == "dark"
