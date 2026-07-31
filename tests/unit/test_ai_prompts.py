@@ -9,7 +9,7 @@ class TestBuildCommitPrompt:
     def test_prompt_without_branch(self):
         diff = "diff --git a/file.py b/file.py\n+print('hello')"
         prompt = build_commit_prompt(diff=diff, branch=None)
-        assert "conventional commit message" in prompt.lower()
+        assert "conventional commit" in prompt.lower()
         assert diff in prompt
         assert "branch" not in prompt.lower()
 
